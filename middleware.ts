@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import jwt from 'jsonwebtoken';
+// import jwt from 'jsonwebtoken';
+import { verifyToken } from 'utils/auth';
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const token = request.cookies.get('token')?.value;
 
   // List of paths that don't require authentication
@@ -29,6 +30,15 @@ export function middleware(request: NextRequest) {
   //     return response;
   //   }
   // }
+    // Verify token if present
+    if (token) {
+      const tokenData = await verifyToken(token);
+      if (!tokenData) {
+        const response = NextResponse.redirect(new URL('/login', request.url));
+        response.cookies.delete('token');
+        return response;
+      }
+    }
 
   return NextResponse.next();
 }

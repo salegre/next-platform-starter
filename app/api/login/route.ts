@@ -48,11 +48,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Create token
+    // const token = jwt.sign(
+    //   { id: user._id, email: user.email },
+    //   process.env.JWT_SECRET!,
+    //   { expiresIn: '1d' }
+    // );
+
     const token = jwt.sign(
-      { id: user._id, email: user.email },
-      process.env.JWT_SECRET!,
-      { expiresIn: '1d' }
-    );
+        { id: user._id.toString(), email: user.email },
+        process.env.JWT_SECRET!,
+        { 
+          expiresIn: '1d',
+          algorithm: 'HS256' // Explicitly specify algorithm
+        }
+      );
+
+
 
     // Remove password from response
     const userResponse = {
@@ -60,7 +71,18 @@ export async function POST(request: NextRequest) {
       email: user.email
     };
 
-    
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET!, {
+            algorithms: ['HS256']
+        });
+        console.log('Decoded token:', decoded);
+        } catch (err) {
+        console.error('Detailed verification error:', {
+            name: err.name,
+            message: err.message,
+            stack: err.stack
+        });
+    }
 
     // Set token in HTTP-only cookie
     const response = NextResponse.json(userResponse, { status: 200 });
@@ -83,4 +105,6 @@ response.headers.set('Access-Control-Allow-Credentials', 'true');
       details: error instanceof Error ? error.message : 'Unknown error' 
     }, { status: 500 });
   }
+
+  
 }

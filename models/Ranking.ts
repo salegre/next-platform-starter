@@ -1,44 +1,43 @@
 import mongoose from 'mongoose';
 
-// Define the interface for TypeScript
+interface PositionHistory {
+  position: number;
+  date: Date;
+}
+
 export interface IRanking extends mongoose.Document {
+  user: mongoose.Types.ObjectId;
   url: string;
   keyword: string;
   position: number | null;
   title?: string;
   linkUrl?: string;
   createdAt: Date;
+  positionHistory: PositionHistory[];
 }
 
-// Create the Mongoose Schema
-const RankingSchema = new mongoose.Schema<IRanking>({
-  url: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  keyword: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  position: {
-    type: Number,
-    default: null
-  },
-  title: {
-    type: String,
-    trim: true
-  },
-  linkUrl: {
-    type: String,
-    trim: true
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
-});
+const RankingSchema = new mongoose.Schema({
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    url: String,
+    keyword: String,
+    position: Number,
+    title: String,
+    linkUrl: String,
+    positionHistory: {
+      type: [{
+        position: { type: Number, required: true },
+        date: { type: Date, default: Date.now }
+      }],
+      default: []
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  });
 
-// Create and export the model
 export const Ranking = mongoose.models.Ranking || mongoose.model<IRanking>('Ranking', RankingSchema);
