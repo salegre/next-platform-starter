@@ -4,23 +4,29 @@ import { Ranking } from 'models/Ranking';
 import connectMongoDB from 'utils/mongodb-connection';
 import { getTokenData } from 'utils/auth';
 
+// Add this type
+type RouteSegment = {
+  params: { id: string }
+};
+
+// Update function signature
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  segment: RouteSegment
 ) {
   try {
     await connectMongoDB();
     const userData = await getTokenData(request);
-    if (!userData) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!userData) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const ranking = await Ranking.findOne({ 
-      _id: params.id,
+      _id: segment.params.id,
       user: userData.id 
     });
 
-    if (!ranking) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json(ranking);
+    if (!ranking) return Response.json({ error: 'Not found' }, { status: 404 });
+    return Response.json(ranking);
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch ranking' }, { status: 500 });
+    return Response.json({ error: 'Failed to fetch ranking' }, { status: 500 });
   }
 }

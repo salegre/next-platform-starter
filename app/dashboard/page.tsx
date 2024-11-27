@@ -1,25 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { Card } from 'components/card';
+import { IRanking } from 'models/Ranking';
+import { IUser } from 'models/User';
+import { RankingsTable } from '@/components/rankings-table';
 
-interface User {
-  email: string;
-}
-
-interface Ranking {
-  _id: string;
-  keyword: string;
-  url: string;
-  linkUrl: string;
-  position: number | null;
-  createdAt: string;
-}
-
-export default function Dashboard() {
-  const [user, setUser] = useState<User | null>(null);
-  const [rankings, setRankings] = useState<Ranking[]>([]);
+export default function Page() {
+  const [user, setUser] = useState<IUser | null>(null);
+  const [rankings, setRankings] = useState<IRanking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
@@ -50,69 +40,44 @@ export default function Dashboard() {
     fetchData();
   }, [router]);
 
-  if (isLoading) return <><div>Loading...</div></>;
+  if (isLoading) return (
+    <Card 
+      title="Loading..." 
+      text=""
+      linkText=""
+      href=""
+    > </Card>
+  );
 
   return (
-    <>
-    <div className="container mx-auto p-6">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="text-gray-600">Welcome, {user?.email}</p>
+    <main className="container mx-auto p-6">
+      <section className="flex flex-col gap-8">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold">Dashboard</h1>
+            <p className="text-gray-600">Welcome, {user?.email}</p>
+          </div>
+          <button 
+            onClick={() => fetch('/api/logout', { method: 'POST' }).then(() => router.push('/login'))}
+            className="btn btn-error"
+          >
+            Logout
+          </button>
         </div>
-        <button 
-          onClick={() => fetch('/api/logout', { method: 'POST' }).then(() => router.push('/login'))}
-          className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition"
-        >
-          Logout
-        </button>
-      </div>
 
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold mb-4">Your Rankings</h2>
+        <Card 
+          title="Your Rankings"
+          text="" 
+          linkText=""
+          href=""
+          >
         {rankings.length === 0 ? (
           <p>No keywords tracked yet.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Keyword</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">URL</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tracked Since</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {rankings.map((ranking) => (
-                  <tr key={ranking._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">  <Link href={`/keyword/${ranking._id}`} className="text-blue-500 hover:underline">
-    {ranking.keyword}
-  </Link></td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-500">
-                      <a 
-                        href={ranking.linkUrl || ranking.url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="hover:underline"
-                      >
-                        {ranking.url}
-                      </a>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{ranking.position ?? 'Pending'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(ranking.createdAt).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          
+          <RankingsTable rankings={rankings} />
         )}
-      </div>
-      
-    </div>
-    </>
+        </Card>
+      </section>
+    </main>
   );
 }
