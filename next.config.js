@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-    reactStrictMode: true
+    reactStrictMode: true,
+    env: {
+        SERPAPI_KEY: process.env.SERPAPI_KEY
+      }
 };
 
 module.exports = nextConfig;
