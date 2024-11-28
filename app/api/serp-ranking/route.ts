@@ -8,6 +8,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const keyword = searchParams.get('keyword');
   const url = searchParams.get('url');
+  let location = searchParams.get('location') || 'Global';
+  let country = searchParams.get('country') || 'Global';
 
   if (!keyword || !url) {
     return NextResponse.json({ error: 'Missing keyword or URL' }, { status: 400 });
@@ -20,12 +22,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const serpParams: any = {
+      engine: 'google',
+      q: keyword,
+      api_key: process.env.SERPAPI_KEY
+    };
+
+    // Set location and country parameters only if they are not "Global"
+    if (location !== 'Global') {
+      serpParams.location = location;
+    }
+    if (country !== 'Global') {
+      serpParams.gl = country; // Google country code
+    }
+
     const serpResponse = await axios.get('https://serpapi.com/search', {
-      params: {
-        engine: 'google',
-        q: keyword,
-        api_key: process.env.SERPAPI_KEY,
-      }
+      params: serpParams
     });
 
     const results = serpResponse.data.organic_results || [];
@@ -35,7 +47,9 @@ export async function GET(request: NextRequest) {
     const existingRanking = await Ranking.findOne({ 
       user: userData.id, 
       url, 
-      keyword 
+      keyword,
+      location,
+      country
     });
 
     if (existingRanking) {
@@ -56,6 +70,8 @@ export async function GET(request: NextRequest) {
         user: userData.id,
         url,
         keyword,
+        location,
+        country,
         position: currentPosition,
         title: sanitizeString(ranking !== -1 ? results[ranking].title : undefined),
         linkUrl: sanitizeString(ranking !== -1 ? results[ranking].link : undefined),
@@ -68,7 +84,13 @@ export async function GET(request: NextRequest) {
       await newRanking.save();
     }
 
-    return NextResponse.json(await Ranking.findOne({ user: userData.id, url, keyword }));
+    return NextResponse.json(await Ranking.findOne({ 
+      user: userData.id, 
+      url, 
+      keyword,
+      location,
+      country 
+    }));
   } catch (error) {
     console.error('API Error:', error);
     return NextResponse.json({ error: 'Failed to process ranking' }, { status: 500 });

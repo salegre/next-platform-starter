@@ -9,6 +9,8 @@ export interface IRanking extends mongoose.Document {
   user: mongoose.Types.ObjectId;
   url: string;
   keyword: string;
+  location: string;  // New field
+  country: string;   // New field
   position: number | null;
   title?: string;
   linkUrl?: string;
@@ -24,6 +26,14 @@ const RankingSchema = new mongoose.Schema({
     },
     url: String,
     keyword: String,
+    location: {        // New field
+      type: String,
+      default: 'Global'
+    },
+    country: {         // New field
+      type: String,
+      default: 'Global'
+    },
     position: Number,
     title: String,
     linkUrl: String,
@@ -32,12 +42,12 @@ const RankingSchema = new mongoose.Schema({
         position: { type: Number, required: true },
         date: { type: Date, default: Date.now }
       }],
-      default: []
+      default: [{ position: 0, date: new Date() }]
     },
     createdAt: {
       type: Date,
       default: Date.now
     }
-  });
+});
 
 export const Ranking = mongoose.models.Ranking || mongoose.model<IRanking>('Ranking', RankingSchema);

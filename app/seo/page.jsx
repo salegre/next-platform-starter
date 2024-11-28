@@ -1,6 +1,6 @@
 import { FeedbackForm } from 'components/feedback-form';
 import { Markdown } from '../../components/markdown';
-import { KeywordRankingForm } from 'components/keyword-ranking-form'; // Adjust import path as needed
+import { KeywordRankingForm } from '@/app/keyword-ranking-form'; // Adjust import path as needed
 
 export const metadata = {
     title: 'SEO Tools'

@@ -10,6 +10,8 @@ interface Ranking {
   position: number;
   title: string;
   linkUrl: string;
+  location: string;
+  country: string;
   positionHistory: {
     position: number;
     date: string;
@@ -44,6 +46,8 @@ export default function KeywordDetails({ params }: { params: { id: string } }) {
             <h2 className="font-semibold mb-2">Current Details</h2>
             <p><span className="font-medium">URL:</span> {ranking.url}</p>
             <p><span className="font-medium">Position:</span> {ranking.position}</p>
+            <p><span className="font-medium">Location:</span> {ranking.location}</p>
+            <p><span className="font-medium">Country:</span> {ranking.country}</p>
             <p><span className="font-medium">Tracked Since:</span> {new Date(ranking.createdAt).toLocaleDateString()}</p>
           </div>
 
@@ -53,6 +57,8 @@ export default function KeywordDetails({ params }: { params: { id: string } }) {
               <thead>
                 <tr className="bg-gray-50">
                   <th className="px-4 py-2 text-left">Keyword</th>
+                  <th className="px-4 py-2 text-left">Location</th>
+                  <th className="px-4 py-2 text-left">Country</th>
                   {recentHistory.map((history, index) => (
                     <th key={index} className="px-4 py-2">
                       {new Date(history.date).toLocaleDateString()}
@@ -63,6 +69,8 @@ export default function KeywordDetails({ params }: { params: { id: string } }) {
               <tbody>
                 <tr className="hover:bg-gray-50">
                   <td className="px-4 py-2 font-medium">{ranking.keyword}</td>
+                  <td className="px-4 py-2">{ranking.location}</td>
+                  <td className="px-4 py-2">{ranking.country}</td>
                   {recentHistory.map((history, index) => (
                     <td key={index} className="px-4 py-2 text-center">
                       {history.position}

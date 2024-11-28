@@ -324,6 +324,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const keyword = searchParams.get('keyword');
   const url = searchParams.get('url');
+  const location = searchParams.get('location') || 'Global';
+  const country = searchParams.get('country') || 'Global';
 
   if (!keyword || !url) {
     return NextResponse.json({ error: 'Missing keyword or URL' }, { status: 400 });
@@ -336,12 +338,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const serpParams: any = {
+      engine: 'google',
+      q: keyword,
+      api_key: process.env.SERPAPI_KEY,
+    };
+
+    // Add location parameters if provided
+    if (location !== 'Global') {
+      serpParams.location = location;
+    }
+    if (country !== 'Global') {
+      serpParams.gl = country; // Google country code
+    }
+
     const serpResponse = await axios.get('https://serpapi.com/search', {
-      params: {
-        engine: 'google',
-        q: keyword,
-        api_key: process.env.SERPAPI_KEY,
-      }
+      params: serpParams
     });
 
     const results = serpResponse.data.organic_results || [];
@@ -351,7 +363,9 @@ export async function GET(request: NextRequest) {
     const existingRanking = await Ranking.findOne({ 
       user: userData.id, 
       url, 
-      keyword 
+      keyword,
+      location,
+      country
     });
 
     if (existingRanking) {
@@ -372,6 +386,8 @@ export async function GET(request: NextRequest) {
         user: userData.id,
         url,
         keyword,
+        location,
+        country,
         position: currentPosition,
         title: sanitizeString(ranking !== -1 ? results[ranking].title : undefined),
         linkUrl: sanitizeString(ranking !== -1 ? results[ranking].link : undefined),
@@ -384,7 +400,13 @@ export async function GET(request: NextRequest) {
       await newRanking.save();
     }
 
-    return NextResponse.json(await Ranking.findOne({ user: userData.id, url, keyword }));
+    return NextResponse.json(await Ranking.findOne({ 
+      user: userData.id, 
+      url, 
+      keyword,
+      location,
+      country 
+    }));
   } catch (error) {
     console.error('API Error:', error);
     return NextResponse.json({ error: 'Failed to process ranking' }, { status: 500 });
@@ -817,6 +839,7 @@ import { Card } from 'components/card';
 import { IRanking } from 'models/Ranking';
 import { IUser } from 'models/User';
 import { RankingsTable } from '@/components/rankings-table';
+import { KeywordRankingForm } from '@/components/keyword-ranking-form';
 
 export default function Page() {
   const [user, setUser] = useState<IUser | null>(null);
@@ -888,6 +911,7 @@ export default function Page() {
           <RankingsTable rankings={rankings} />
         )}
         </Card>
+        <KeywordRankingForm />
       </section>
     </main>
   );
@@ -1969,13 +1993,19 @@ interface RankingResult {
   position: number | null;
   title?: string;
   link?: string;
+  location?: string;
+  country?: string;
+  error?: string; // Add the error property
 }
 
 export function KeywordRankingForm() {
   const [url, setUrl] = useState('');
   const [keywords, setKeywords] = useState(['', '', '']);
+  const [location, setLocation] = useState('Global');
+  const [country, setCountry] = useState('Global');
   const [rankings, setRankings] = useState<RankingResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleKeywordChange = (index: number, value: string) => {
     const newKeywords = [...keywords];
@@ -1985,11 +2015,12 @@ export function KeywordRankingForm() {
 
   const checkRankings = async () => {
     if (!url || keywords.every(k => k.trim() === '')) {
-      alert('Please enter a URL and at least one keyword');
+      setError('Please enter a URL and at least one keyword');
       return;
     }
 
     setIsLoading(true);
+    setError(null);
     setRankings([]);
 
     try {
@@ -2001,24 +2032,42 @@ export function KeywordRankingForm() {
               const response = await axios.get('/api/serp-ranking', {
                 params: { 
                   keyword, 
-                  url 
+                  url,
+                  location,
+                  country
                 }
               });
-              return response.data;
+              
+              // Ensure we have a valid response
+              if (response.data) {
+                return response.data;
+              }
+              
+              // If no valid response, return a structured error result
+              return {
+                keyword,
+                position: null,
+                location,
+                country,
+                error: 'No data received'
+              };
             } catch (error) {
               console.error(`Error checking ranking for ${keyword}:`, error);
-              return { 
-                keyword, 
-                position: null 
+              return {
+                keyword,
+                position: null,
+                location,
+                country,
+                error: error instanceof Error ? error.message : 'An error occurred'
               };
             }
           })
       );
 
-      setRankings(results);
+      setRankings(results.filter(result => result !== null));
     } catch (error) {
+      setError('Failed to check rankings');
       console.error('Error checking rankings:', error);
-      alert('Failed to check rankings');
     } finally {
       setIsLoading(false);
     }
@@ -2028,6 +2077,12 @@ export function KeywordRankingForm() {
     <div className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
       <h2 className="text-xl font-bold mb-4">Keyword Ranking Checker</h2>
       
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+          {error}
+        </div>
+      )}
+
       <div className="mb-4">
         <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="url">
           Website URL
@@ -2042,16 +2097,29 @@ export function KeywordRankingForm() {
         />
       </div>
 
+      <div className="mb-4">
+        <label className="block text-gray-700 text-sm font-bold mb-2">
+          Location: {location}
+        </label>
+        <select 
+          value={location}
+          onChange={(e) => setLocation(e.target.value)}
+          className="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+        >
+          <option value="Global">Global</option>
+          <option value="United States">United States</option>
+          <option value="United Kingdom">United Kingdom</option>
+          <option value="Australia">Australia</option>
+          <option value="Peru">Peru</option>
+        </select>
+      </div>
+
       {keywords.map((keyword, index) => (
         <div key={index} className="mb-4">
-          <label 
-            className="block text-gray-700 text-sm font-bold mb-2" 
-            htmlFor={`keyword-${index}`}
-          >
+          <label className="block text-gray-700 text-sm font-bold mb-2">
             Keyword {index + 1}
           </label>
           <input
-            id={`keyword-${index}`}
             type="text"
             value={keyword}
             onChange={(e) => handleKeywordChange(index, e.target.value)}
@@ -2075,24 +2143,29 @@ export function KeywordRankingForm() {
         <div className="mt-6">
           <h3 className="text-lg font-semibold mb-4">Ranking Results</h3>
           <ul className="list-disc pl-5">
-            {rankings.map((result, index) => (
-              <li 
-                key={index} 
-                className={`mb-2 ${
-                  result.position ? 'text-green-600' : 'text-red-600'
-                }`}
-              >
-                {result.keyword}: {' '}
-                {result.position ? 
-                  `Position ${result.position}` : 
-                  'Not found in top 100 results'}
-                {result.title && result.position && (
-                  <span className="block text-sm text-gray-500">
-                    Title: {result.title}
-                  </span>
-                )}
-              </li>
-            ))}
+            {rankings.map((result, index) => {
+              if (!result) return null;
+              
+              return (
+                <li 
+                  key={index} 
+                  className={`mb-2 ${
+                    result.error ? 'text-red-600' :
+                    result.position ? 'text-green-600' : 'text-red-600'
+                  }`}
+                >
+                  {result.keyword} ({result.location || 'Global'}): {' '}
+                  {result.error ? `Error: ${result.error}` :
+                   result.position ? `Position ${result.position}` : 
+                   'Not found in top 100 results'}
+                  {result.title && result.position && (
+                    <span className="block text-sm text-gray-500">
+                      Title: {result.title}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
@@ -3035,6 +3108,8 @@ export interface IRanking extends mongoose.Document {
   user: mongoose.Types.ObjectId;
   url: string;
   keyword: string;
+  location: string;  // New field
+  country: string;   // New field
   position: number | null;
   title?: string;
   linkUrl?: string;
@@ -3050,6 +3125,14 @@ const RankingSchema = new mongoose.Schema({
     },
     url: String,
     keyword: String,
+    location: {        // New field
+      type: String,
+      default: 'Global'
+    },
+    country: {         // New field
+      type: String,
+      default: 'Global'
+    },
     position: Number,
     title: String,
     linkUrl: String,
@@ -3058,13 +3141,13 @@ const RankingSchema = new mongoose.Schema({
         position: { type: Number, required: true },
         date: { type: Date, default: Date.now }
       }],
-      default: []
+      default: [{ position: 0, date: new Date() }]
     },
     createdAt: {
       type: Date,
       default: Date.now
     }
-  });
+});
 
 export const Ranking = mongoose.models.Ranking || mongoose.model<IRanking>('Ranking', RankingSchema);
 ```

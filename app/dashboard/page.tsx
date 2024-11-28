@@ -6,7 +6,7 @@ import { Card } from 'components/card';
 import { IRanking } from 'models/Ranking';
 import { IUser } from 'models/User';
 import { RankingsTable } from '@/components/rankings-table';
-import { KeywordRankingForm } from '@/components/keyword-ranking-form';
+import { KeywordRankingForm } from '@/app/keyword-ranking-form';
 
 export default function Page() {
   const [user, setUser] = useState<IUser | null>(null);
