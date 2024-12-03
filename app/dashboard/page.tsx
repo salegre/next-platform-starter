@@ -1,36 +1,37 @@
+// app/dashboard/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card } from 'components/card';
-import { IRanking } from 'models/Ranking';
+import { IProject } from 'models/Project';
 import { IUser } from 'models/User';
-import { RankingsTable } from '@/components/rankings-table';
-import { KeywordRankingForm } from '@/app/keyword-ranking-form';
+import { ProjectCard } from 'components/project-card';
 
-export default function Page() {
+export default function DashboardPage() {
   const [user, setUser] = useState<IUser | null>(null);
-  const [rankings, setRankings] = useState<IRanking[]>([]);
+  const [projects, setProjects] = useState<IProject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [userResponse, rankingsResponse] = await Promise.all([
+        const [userResponse, projectsResponse] = await Promise.all([
           fetch('/api/user'),
-          fetch('/api/rankings')
+          fetch('/api/projects')
         ]);
 
-        if (!userResponse.ok || !rankingsResponse.ok) throw new Error('Failed to fetch data');
+        if (!userResponse.ok || !projectsResponse.ok) 
+          throw new Error('Failed to fetch data');
 
-        const [userData, rankingsData] = await Promise.all([
+        const [userData, projectsData] = await Promise.all([
           userResponse.json(),
-          rankingsResponse.json()
+          projectsResponse.json()
         ]);
 
         setUser(userData);
-        setRankings(rankingsData);
+        setProjects(projectsData);
       } catch (error) {
         router.push('/login');
       } finally {
@@ -41,45 +42,28 @@ export default function Page() {
     fetchData();
   }, [router]);
 
-  if (isLoading) return (
-    <Card 
-      title="Loading..." 
-      text=""
-      linkText=""
-      href=""
-    > </Card>
-  );
+  if (isLoading) return <div>Loading...</div>;
 
   return (
     <main className="container mx-auto p-6">
-      <section className="flex flex-col gap-8">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold">Dashboard</h1>
-            <p className="text-gray-600">Welcome, {user?.email}</p>
-          </div>
-          <button 
-            onClick={() => fetch('/api/logout', { method: 'POST' }).then(() => router.push('/login'))}
-            className="btn btn-error"
-          >
-            Logout
-          </button>
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="text-gray-600">Welcome, {user?.email}</p>
         </div>
+        <button 
+          onClick={() => router.push('/projects/new')}
+          className="btn btn-primary"
+        >
+          New Project
+        </button>
+      </div>
 
-        <Card 
-          title="Your Rankings"
-          text="" 
-          linkText=""
-          href=""
-          >
-        {rankings.length === 0 ? (
-          <p>No keywords tracked yet.</p>
-        ) : (
-          <RankingsTable rankings={rankings} />
-        )}
-        </Card>
-        <KeywordRankingForm />
-      </section>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {projects.map((project) => (
+          <ProjectCard key={project._id.toString()} project={project} />
+        ))}
+      </div>
     </main>
   );
 }

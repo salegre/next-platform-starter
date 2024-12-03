@@ -1,3 +1,4 @@
+// app/keyword-ranking-form.tsx
 'use client';
 
 import { useState } from 'react';
@@ -13,8 +14,16 @@ interface RankingResult {
   error?: string;
 }
 
-export function KeywordRankingForm() {
-  const [url, setUrl] = useState('');
+// Make props required instead of optional
+export interface KeywordRankingFormProps {
+  projectId: string;
+  domain: string;
+}
+
+// Export the component with explicit prop typing
+export function KeywordRankingForm(props: KeywordRankingFormProps) {
+  const { projectId, domain } = props;
+  const [url, setUrl] = useState(domain);
   const [keywords, setKeywords] = useState(['', '', '']);
   const [location, setLocation] = useState('Global');
   const [country, setCountry] = useState('Global');
