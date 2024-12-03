@@ -7,6 +7,7 @@ import { IRanking } from 'models/Ranking';
 import { IUser } from 'models/User';
 import { RankingsTable } from '@/components/rankings-table';
 import { KeywordRankingForm } from '@/app/keyword-ranking-form';
+import CsvUploadComponent from 'components/csv-upload';
 
 export default function Page() {
   const [user, setUser] = useState<IUser | null>(null);
@@ -79,6 +80,7 @@ export default function Page() {
         )}
         </Card>
         <KeywordRankingForm />
+        <CsvUploadComponent />
       </section>
     </main>
   );

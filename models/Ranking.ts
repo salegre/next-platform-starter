@@ -3,19 +3,25 @@ import mongoose from 'mongoose';
 interface PositionHistory {
   position: number;
   date: Date;
+  type?: string;
+  landingPage?: string;
 }
 
 export interface IRanking extends mongoose.Document {
   user: mongoose.Types.ObjectId;
   url: string;
   keyword: string;
-  location: string;  // New field
-  country: string;   // New field
+  location: string;
+  country: string;
   position: number | null;
   title?: string;
   linkUrl?: string;
-  createdAt: Date;
   positionHistory: PositionHistory[];
+  searchVolume: number;
+  cpc: number;
+  keywordDifficulty: number;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const RankingSchema = new mongoose.Schema({
@@ -25,29 +31,53 @@ const RankingSchema = new mongoose.Schema({
       required: true
     },
     url: String,
-    keyword: String,
-    location: {        // New field
+    keyword: {
+      type: String,
+      required: true
+    },
+    location: {
       type: String,
       default: 'Global'
     },
-    country: {         // New field
+    country: {
       type: String,
       default: 'Global'
     },
-    position: Number,
+    position: {
+      type: Number,
+      default: null
+    },
     title: String,
     linkUrl: String,
-    positionHistory: {
-      type: [{
-        position: { type: Number, required: true },
-        date: { type: Date, default: Date.now }
-      }],
-      default: [{ position: 0, date: new Date() }]
+    positionHistory: [{
+      position: { 
+        type: Number, 
+        required: true 
+      },
+      date: { 
+        type: Date, 
+        required: true 
+      },
+      type: String,
+      landingPage: String
+    }],
+    searchVolume: {
+      type: Number,
+      default: 0
     },
-    createdAt: {
-      type: Date,
-      default: Date.now
+    cpc: {
+      type: Number,
+      default: 0
+    },
+    keywordDifficulty: {
+      type: Number,
+      default: 0
     }
+}, {
+    timestamps: true
 });
+
+// Add index for faster queries
+RankingSchema.index({ user: 1, keyword: 1 });
 
 export const Ranking = mongoose.models.Ranking || mongoose.model<IRanking>('Ranking', RankingSchema);

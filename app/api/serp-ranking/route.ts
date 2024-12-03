@@ -44,6 +44,11 @@ export async function GET(request: NextRequest) {
     const ranking = results.findIndex(result => result.link.includes(url));
     const currentPosition = ranking !== -1 ? ranking + 1 : null;
 
+    // Only proceed if we found a position
+    if (currentPosition === null) {
+      return NextResponse.json({ error: 'URL not found in results' }, { status: 404 });
+    }
+
     const existingRanking = await Ranking.findOne({ 
       user: userData.id, 
       url, 
@@ -52,20 +57,32 @@ export async function GET(request: NextRequest) {
       country
     });
 
+    const newHistoryEntry = {
+      position: currentPosition,
+      date: new Date(),
+      type: 'organic',
+      landingPage: url
+    };
+
     if (existingRanking) {
-      await Ranking.updateOne(
-        { _id: existingRanking._id },
+      // Update existing ranking
+      const updatedRanking = await Ranking.findByIdAndUpdate(
+        existingRanking._id,
         {
-          $set: { position: currentPosition },
+          $set: { 
+            position: currentPosition,
+            title: results[ranking].title,
+            linkUrl: results[ranking].link,
+          },
           $push: { 
-            positionHistory: {
-              position: currentPosition,
-              date: new Date()
-            }
+            positionHistory: newHistoryEntry
           }
-        }
+        },
+        { new: true, runValidators: true }
       );
+      return NextResponse.json(updatedRanking);
     } else {
+      // Create new ranking
       const newRanking = new Ranking({
         user: userData.id,
         url,
@@ -73,33 +90,20 @@ export async function GET(request: NextRequest) {
         location,
         country,
         position: currentPosition,
-        title: sanitizeString(ranking !== -1 ? results[ranking].title : undefined),
-        linkUrl: sanitizeString(ranking !== -1 ? results[ranking].link : undefined),
-        positionHistory: [{
-          position: currentPosition,
-          date: new Date()
-        }],
+        title: results[ranking].title,
+        linkUrl: results[ranking].link,
+        positionHistory: [newHistoryEntry],
         createdAt: new Date()
       });
       await newRanking.save();
+      return NextResponse.json(newRanking);
     }
 
-    return NextResponse.json(await Ranking.findOne({ 
-      user: userData.id, 
-      url, 
-      keyword,
-      location,
-      country 
-    }));
   } catch (error) {
     console.error('API Error:', error);
-    return NextResponse.json({ error: 'Failed to process ranking' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Failed to process ranking',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
-}
-
-function sanitizeString(input: string | undefined): string | undefined {
-  if (!input) return undefined;
-  return input.normalize('NFC')
-    .replace(/[^\x20-\x7E]/g, '')
-    .trim();
 }

@@ -324,8 +324,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const keyword = searchParams.get('keyword');
   const url = searchParams.get('url');
-  const location = searchParams.get('location') || 'Global';
-  const country = searchParams.get('country') || 'Global';
+  let location = searchParams.get('location') || 'Global';
+  let country = searchParams.get('country') || 'Global';
 
   if (!keyword || !url) {
     return NextResponse.json({ error: 'Missing keyword or URL' }, { status: 400 });
@@ -341,10 +341,10 @@ export async function GET(request: NextRequest) {
     const serpParams: any = {
       engine: 'google',
       q: keyword,
-      api_key: process.env.SERPAPI_KEY,
+      api_key: process.env.SERPAPI_KEY
     };
 
-    // Add location parameters if provided
+    // Set location and country parameters only if they are not "Global"
     if (location !== 'Global') {
       serpParams.location = location;
     }
@@ -839,7 +839,7 @@ import { Card } from 'components/card';
 import { IRanking } from 'models/Ranking';
 import { IUser } from 'models/User';
 import { RankingsTable } from '@/components/rankings-table';
-import { KeywordRankingForm } from '@/components/keyword-ranking-form';
+import { KeywordRankingForm } from '@/app/keyword-ranking-form';
 
 export default function Page() {
   const [user, setUser] = useState<IUser | null>(null);
@@ -1188,6 +1188,211 @@ export default function Page() {
 
 ```
 
+# app/keyword-ranking-form.tsx
+
+```tsx
+'use client';
+
+import { useState } from 'react';
+import axios from 'axios';
+
+interface RankingResult {
+  keyword: string;
+  position: number | null;
+  title?: string;
+  link?: string;
+  location?: string;
+  country?: string;
+  error?: string;
+}
+
+export function KeywordRankingForm() {
+  const [url, setUrl] = useState('');
+  const [keywords, setKeywords] = useState(['', '', '']);
+  const [location, setLocation] = useState('Global');
+  const [country, setCountry] = useState('Global');
+  const [rankings, setRankings] = useState<RankingResult[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleKeywordChange = (index: number, value: string) => {
+    const newKeywords = [...keywords];
+    newKeywords[index] = value;
+    setKeywords(newKeywords);
+  };
+
+  const checkRankings = async () => {
+    if (!url || keywords.every(k => k.trim() === '')) {
+      setError('Please enter a URL and at least one keyword');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setRankings([]);
+
+    try {
+      const results = await Promise.all(
+        keywords
+          .filter(keyword => keyword.trim() !== '')
+          .map(async (keyword) => {
+            try {
+              const response = await axios.get('/api/serp-ranking', {
+                params: { 
+                  keyword, 
+                  url,
+                  location,
+                  country
+                }
+              });
+              
+              // Ensure we have a valid response
+              if (response.data) {
+                return response.data;
+              }
+              
+              // If no valid response, return a structured error result
+              return {
+                keyword,
+                position: null,
+                location,
+                country,
+                error: 'Keyword not found in top 100 results'
+              };
+            } catch (error) {
+              console.error(`Error checking ranking for ${keyword}:`, error);
+              return {
+                keyword,
+                position: null,
+                location,
+                country,
+                error: error instanceof Error ? error.message : 'An error occurred'
+              };
+            }
+          })
+      );
+
+      setRankings(results.filter(result => result !== null));
+    } catch (error) {
+      setError('Failed to check rankings');
+      console.error('Error checking rankings:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+
+  return (
+    <div className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
+      <h2 className="text-xl font-bold mb-4 text-gray-900">Keyword Ranking Checker</h2>
+      
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+          {error}
+        </div>
+      )}
+
+      <div className="mb-4">
+        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="url">
+          Website URL
+        </label>
+        <input
+          id="url"
+          type="text"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="Enter website URL (e.g., example.com)"
+          className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+        />
+      </div>
+
+      <div className="mb-4">
+        <label className="block text-gray-700 text-sm font-bold mb-2">
+          Location
+        </label>
+        <select 
+          value={location}
+          onChange={(e) => {
+            setLocation(e.target.value);
+            if (e.target.value === 'Global') {
+              setCountry('Global');
+            } else if (e.target.value === 'United States') {
+              setCountry('US');
+            } else if (e.target.value === 'Nashville, TN') {
+              setCountry('US');
+            } else if (e.target.value === 'Lima, Peru') {
+              setCountry('PE');
+            }
+          }}
+          className="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+        >
+          <option value="Global">Global</option>
+          <option value="United States">United States</option>
+          <option value="Nashville, TN">Nashville, TN</option>
+          <option value="Lima, Peru">Lima, Peru</option>
+        </select>
+      </div>
+
+      {keywords.map((keyword, index) => (
+        <div key={index} className="mb-4">
+          <label className="block text-gray-700 text-sm font-bold mb-2">
+            Keyword {index + 1}
+          </label>
+          <input
+            type="text"
+            value={keyword}
+            onChange={(e) => handleKeywordChange(index, e.target.value)}
+            placeholder={`Enter keyword ${index + 1}`}
+            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+          />
+        </div>
+      ))}
+
+      <div className="flex items-center justify-between">
+        <button
+          onClick={checkRankings}
+          disabled={isLoading}
+          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:opacity-50"
+        >
+          {isLoading ? 'Checking...' : 'Check Rankings'}
+        </button>
+      </div>
+
+      {rankings.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-lg font-semibold mb-4">Ranking Results</h3>
+          <ul className="list-disc pl-5">
+            {rankings.map((result, index) => {
+              if (!result) return null;
+              
+              return (
+                <li 
+                  key={index} 
+                  className={`mb-2 ${
+                    result.error ? 'text-red-600' :
+                    result.position ? 'text-green-600' : 'text-red-600'
+                  }`}
+                >
+                  {result.keyword} ({result.location || 'Global'}): {' '}
+                  {result.error ? `Error: ${result.error}` :
+                   result.position ? `Position ${result.position}` : 
+                   'Not found in top 100 results'}
+                  {result.title && result.position && (
+                    <span className="block text-sm text-gray-500">
+                      Title: {result.title}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
 # app/keyword/[id]/page.tsx
 
 ```tsx
@@ -1203,6 +1408,8 @@ interface Ranking {
   position: number;
   title: string;
   linkUrl: string;
+  location: string;
+  country: string;
   positionHistory: {
     position: number;
     date: string;
@@ -1237,6 +1444,8 @@ export default function KeywordDetails({ params }: { params: { id: string } }) {
             <h2 className="font-semibold mb-2">Current Details</h2>
             <p><span className="font-medium">URL:</span> {ranking.url}</p>
             <p><span className="font-medium">Position:</span> {ranking.position}</p>
+            <p><span className="font-medium">Location:</span> {ranking.location}</p>
+            <p><span className="font-medium">Country:</span> {ranking.country}</p>
             <p><span className="font-medium">Tracked Since:</span> {new Date(ranking.createdAt).toLocaleDateString()}</p>
           </div>
 
@@ -1246,6 +1455,8 @@ export default function KeywordDetails({ params }: { params: { id: string } }) {
               <thead>
                 <tr className="bg-gray-50">
                   <th className="px-4 py-2 text-left">Keyword</th>
+                  <th className="px-4 py-2 text-left">Location</th>
+                  <th className="px-4 py-2 text-left">Country</th>
                   {recentHistory.map((history, index) => (
                     <th key={index} className="px-4 py-2">
                       {new Date(history.date).toLocaleDateString()}
@@ -1256,6 +1467,8 @@ export default function KeywordDetails({ params }: { params: { id: string } }) {
               <tbody>
                 <tr className="hover:bg-gray-50">
                   <td className="px-4 py-2 font-medium">{ranking.keyword}</td>
+                  <td className="px-4 py-2">{ranking.location}</td>
+                  <td className="px-4 py-2">{ranking.country}</td>
                   {recentHistory.map((history, index) => (
                     <td key={index} className="px-4 py-2 text-center">
                       {history.position}
@@ -1674,7 +1887,7 @@ async function RandomWikiArticle() {
 ```jsx
 import { FeedbackForm } from 'components/feedback-form';
 import { Markdown } from '../../components/markdown';
-import { KeywordRankingForm } from 'components/keyword-ranking-form'; // Adjust import path as needed
+import { KeywordRankingForm } from '@/app/keyword-ranking-form'; // Adjust import path as needed
 
 export const metadata = {
     title: 'SEO Tools'
@@ -1801,6 +2014,27 @@ export function ContextAlert(props) {
     }
 }
 
+```
+
+# components/country-flag.tsx
+
+```tsx
+import React from 'react';
+
+const countryFlags = {
+  US: '🇺🇸',
+  PE: '🇵🇪',
+  Global: '🌎',
+  // Add more country codes as needed
+};
+
+export function Country({ code }: { code: string }) {
+  return (
+    <span className="inline-flex items-center">
+      {countryFlags[code] || ''}
+    </span>
+  );
+}
 ```
 
 # components/feedback-form.jsx
@@ -1980,200 +2214,6 @@ export function Header() {
 
 ```
 
-# components/keyword-ranking-form.tsx
-
-```tsx
-'use client';
-
-import { useState } from 'react';
-import axios from 'axios';
-
-interface RankingResult {
-  keyword: string;
-  position: number | null;
-  title?: string;
-  link?: string;
-  location?: string;
-  country?: string;
-  error?: string; // Add the error property
-}
-
-export function KeywordRankingForm() {
-  const [url, setUrl] = useState('');
-  const [keywords, setKeywords] = useState(['', '', '']);
-  const [location, setLocation] = useState('Global');
-  const [country, setCountry] = useState('Global');
-  const [rankings, setRankings] = useState<RankingResult[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleKeywordChange = (index: number, value: string) => {
-    const newKeywords = [...keywords];
-    newKeywords[index] = value;
-    setKeywords(newKeywords);
-  };
-
-  const checkRankings = async () => {
-    if (!url || keywords.every(k => k.trim() === '')) {
-      setError('Please enter a URL and at least one keyword');
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-    setRankings([]);
-
-    try {
-      const results = await Promise.all(
-        keywords
-          .filter(keyword => keyword.trim() !== '')
-          .map(async (keyword) => {
-            try {
-              const response = await axios.get('/api/serp-ranking', {
-                params: { 
-                  keyword, 
-                  url,
-                  location,
-                  country
-                }
-              });
-              
-              // Ensure we have a valid response
-              if (response.data) {
-                return response.data;
-              }
-              
-              // If no valid response, return a structured error result
-              return {
-                keyword,
-                position: null,
-                location,
-                country,
-                error: 'No data received'
-              };
-            } catch (error) {
-              console.error(`Error checking ranking for ${keyword}:`, error);
-              return {
-                keyword,
-                position: null,
-                location,
-                country,
-                error: error instanceof Error ? error.message : 'An error occurred'
-              };
-            }
-          })
-      );
-
-      setRankings(results.filter(result => result !== null));
-    } catch (error) {
-      setError('Failed to check rankings');
-      console.error('Error checking rankings:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <div className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
-      <h2 className="text-xl font-bold mb-4">Keyword Ranking Checker</h2>
-      
-      {error && (
-        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-          {error}
-        </div>
-      )}
-
-      <div className="mb-4">
-        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="url">
-          Website URL
-        </label>
-        <input
-          id="url"
-          type="text"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="Enter website URL (e.g., example.com)"
-          className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-        />
-      </div>
-
-      <div className="mb-4">
-        <label className="block text-gray-700 text-sm font-bold mb-2">
-          Location: {location}
-        </label>
-        <select 
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-          className="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-        >
-          <option value="Global">Global</option>
-          <option value="United States">United States</option>
-          <option value="United Kingdom">United Kingdom</option>
-          <option value="Australia">Australia</option>
-          <option value="Peru">Peru</option>
-        </select>
-      </div>
-
-      {keywords.map((keyword, index) => (
-        <div key={index} className="mb-4">
-          <label className="block text-gray-700 text-sm font-bold mb-2">
-            Keyword {index + 1}
-          </label>
-          <input
-            type="text"
-            value={keyword}
-            onChange={(e) => handleKeywordChange(index, e.target.value)}
-            placeholder={`Enter keyword ${index + 1}`}
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-          />
-        </div>
-      ))}
-
-      <div className="flex items-center justify-between">
-        <button
-          onClick={checkRankings}
-          disabled={isLoading}
-          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:opacity-50"
-        >
-          {isLoading ? 'Checking...' : 'Check Rankings'}
-        </button>
-      </div>
-
-      {rankings.length > 0 && (
-        <div className="mt-6">
-          <h3 className="text-lg font-semibold mb-4">Ranking Results</h3>
-          <ul className="list-disc pl-5">
-            {rankings.map((result, index) => {
-              if (!result) return null;
-              
-              return (
-                <li 
-                  key={index} 
-                  className={`mb-2 ${
-                    result.error ? 'text-red-600' :
-                    result.position ? 'text-green-600' : 'text-red-600'
-                  }`}
-                >
-                  {result.keyword} ({result.location || 'Global'}): {' '}
-                  {result.error ? `Error: ${result.error}` :
-                   result.position ? `Position ${result.position}` : 
-                   'Not found in top 100 results'}
-                  {result.title && result.position && (
-                    <span className="block text-sm text-gray-500">
-                      Title: {result.title}
-                    </span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-```
-
 # components/markdown.jsx
 
 ```jsx
@@ -2261,46 +2301,57 @@ export function RandomQuote() {
 # components/rankings-table.tsx
 
 ```tsx
-// components/rankings-table.tsx
 import { IRanking } from "models/Ranking";
 import Link from "next/link";
-  
-  export function RankingsTable({ rankings }: { rankings: IRanking[] }) {
-    return (
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Keyword</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">URL</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tracked Since</th>
+import { Country } from "./country-flag";
+
+export function RankingsTable({ rankings }: { rankings: IRanking[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Keyword</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">URL</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tracked Since</th>
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {rankings.map((ranking) => (
+            <tr key={ranking._id.toString()} className="hover:bg-gray-50">
+              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                <Link href={`/keyword/${ranking._id}`} className="text-blue-500 hover:underline">
+                  {ranking.keyword}
+                </Link>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-500">
+                <a href={ranking.linkUrl || ranking.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                  {ranking.url}
+                </a>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{ranking.position ?? 'Pending'}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {ranking.location && ranking.country !== 'Global' ? (
+                  <div className="flex items-center gap-2">
+                    <Country code={ranking.country} />
+                    {ranking.location}
+                  </div>
+                ) : (
+                  'Global'
+                )}
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {new Date(ranking.createdAt).toLocaleDateString()}
+              </td>
             </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {rankings.map((ranking) => (
-              <tr key={ranking._id.toString()} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  <Link href={`/keyword/${ranking._id}`} className="text-blue-500 hover:underline">
-                    {ranking.keyword}
-                  </Link>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-500">
-                  <a href={ranking.linkUrl || ranking.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                    {ranking.url}
-                  </a>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{ranking.position ?? 'Pending'}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(ranking.createdAt).toLocaleDateString()}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 ```
 
 # components/submit-button.jsx
