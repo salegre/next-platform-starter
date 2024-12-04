@@ -23,7 +23,7 @@ interface SiteStructureProps {
     externalLinks: number;
   };
   pages?: PageNode[];
-  onPageClick?: (pageUrl: string) => void;  // Added this line
+  onPageClick?: (pageUrl: string) => void;
 }
 
 export default function SiteStructure({ structure, pages = [], onPageClick }: SiteStructureProps) {
@@ -39,25 +39,39 @@ export default function SiteStructure({ structure, pages = [], onPageClick }: Si
     setExpandedNodes(newExpanded);
   };
 
-  // Group pages by their level and parent
-  const pagesByParent = pages.reduce((acc, page) => {
-    const parent = page.parentUrl || 'root';
-    if (!acc[parent]) {
-      acc[parent] = [];
-    }
-    acc[parent].push(page);
-    return acc;
-  }, {} as Record<string, PageNode[]>);
+  // Create a map to track parent-child relationships
+  const pagesByParent: Record<string, PageNode[]> = {};
+  const processedUrls = new Set<string>();
 
-  const renderNode = (node: PageNode) => {
+  // Process pages to build hierarchy safely
+  pages.forEach(page => {
+    if (processedUrls.has(page.url)) return; // Skip if already processed
+    processedUrls.add(page.url);
+
+    const parent = page.parentUrl || 'root';
+    if (!pagesByParent[parent]) {
+      pagesByParent[parent] = [];
+    }
+    // Avoid circular references
+    if (page.parentUrl !== page.url) {
+      pagesByParent[parent].push(page);
+    }
+  });
+
+  const renderNode = (node: PageNode, processedNodes = new Set<string>()) => {
+    // Prevent infinite recursion
+    if (processedNodes.has(node.url)) {
+      return null;
+    }
+    processedNodes.add(node.url);
+
     const isExpanded = expandedNodes.has(node.url);
-    const hasChildren = pagesByParent[node.url]?.length > 0;
+    const children = pagesByParent[node.url] || [];
+    const hasChildren = children.length > 0;
     
     return (
       <div key={node.url} className="mt-2">
-        <div 
-          className="flex items-center gap-2 hover:bg-gray-100 p-2 rounded"
-        >
+        <div className="flex items-center gap-2 hover:bg-gray-100 p-2 rounded">
           <div 
             className="cursor-pointer"
             onClick={() => toggleNode(node.url)}
@@ -80,26 +94,31 @@ export default function SiteStructure({ structure, pages = [], onPageClick }: Si
           <div className="ml-6 border-l pl-4">
             {node.links.length > 0 && (
               <div className="text-sm text-gray-600 mt-2">
-                <p>Links:</p>
+                <p>Links ({node.links.length}):</p>
                 <ul className="ml-4">
-                  {node.links.map((link, index) => (
+                  {node.links.slice(0, 5).map((link, index) => (
                     <li key={index} className="flex items-center gap-2">
                       {link.type === 'external' ? <ExternalLink size={12} /> : <Globe size={12} />}
                       <a 
                         href={link.url} 
                         target="_blank" 
                         rel="noopener noreferrer"
-                        className="hover:underline"
+                        className="hover:underline truncate max-w-md"
                       >
                         {link.text || link.url}
                       </a>
                     </li>
                   ))}
+                  {node.links.length > 5 && (
+                    <li className="text-gray-500 italic mt-1">
+                      {`... and ${node.links.length - 5} more links`}
+                    </li>
+                  )}
                 </ul>
               </div>
             )}
             
-            {pagesByParent[node.url]?.map(childNode => renderNode(childNode))}
+            {children.map(childNode => renderNode(childNode, new Set(processedNodes)))}
           </div>
         )}
       </div>
@@ -131,7 +150,7 @@ export default function SiteStructure({ structure, pages = [], onPageClick }: Si
 
       <div className="border rounded-lg p-4">
         <h3 className="text-lg font-semibold mb-4">Page Hierarchy</h3>
-        {pagesByParent['root']?.map(node => renderNode(node))}
+        {pagesByParent['root']?.map(node => renderNode(node, new Set()))}
       </div>
     </div>
   );
