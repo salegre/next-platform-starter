@@ -123,6 +123,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             <SiteStructure 
             structure={project.siteStructure}
             pages={project.pages || []}
+            auditResults={project.auditResults || []}  // Pass the array directly
             onPageClick={handlePageClick}
             />
         </div>

@@ -1,10 +1,19 @@
+// components/site-structure.tsx
 import React, { useState } from 'react';
-import { ChevronRight, ChevronDown, Globe, ExternalLink, FileText } from 'lucide-react';
+import { ChevronRight, ChevronDown, Globe, ExternalLink, FileText, AlertTriangle, XCircle, Info } from 'lucide-react';
 
 interface PageLink {
   url: string;
   text: string;
   type: 'internal' | 'external';
+}
+
+interface AuditResult {
+  type: string;
+  severity: 'error' | 'warning' | 'info';
+  message: string;
+  details?: string;
+  url?: string;  // Make sure we capture the URL from audit results
 }
 
 interface PageNode {
@@ -23,10 +32,11 @@ interface SiteStructureProps {
     externalLinks: number;
   };
   pages?: PageNode[];
+  auditResults?: AuditResult[];  // Change to array of audit results
   onPageClick?: (pageUrl: string) => void;
 }
 
-export default function SiteStructure({ structure, pages = [], onPageClick }: SiteStructureProps) {
+export default function SiteStructure({ structure, pages = [], auditResults = [], onPageClick }: SiteStructureProps) {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
   const toggleNode = (url: string) => {
@@ -39,30 +49,77 @@ export default function SiteStructure({ structure, pages = [], onPageClick }: Si
     setExpandedNodes(newExpanded);
   };
 
+  // Helper function to normalize URLs for comparison
+  const normalizeUrl = (url: string): string => {
+    try {
+      return new URL(url).pathname.replace(/\/$/, '');
+    } catch {
+      return url.replace(/\/$/, '');
+    }
+  };
+
+  const getAuditCounts = (pageUrl: string) => {
+    const normalizedPageUrl = normalizeUrl(pageUrl);
+    const results = auditResults.filter(result => {
+      const resultUrl = result.url ? normalizeUrl(result.url) : '';
+      return resultUrl === normalizedPageUrl;
+    });
+
+    return results.reduce((acc, result) => {
+      if (result.severity === 'error') acc.errors++;
+      if (result.severity === 'warning') acc.warnings++;
+      if (result.severity === 'info') acc.infos++;
+      return acc;
+    }, { errors: 0, warnings: 0, infos: 0 });
+  };
+
+  const renderAuditIcons = (url: string) => {
+    const counts = getAuditCounts(url);
+    
+    return (
+      <div className="flex items-center gap-2 ml-2">
+        {counts.errors > 0 && (
+          <div className="flex items-center text-red-500" title={`${counts.errors} errors`}>
+            <XCircle size={16} />
+            <span className="text-xs ml-1">{counts.errors}</span>
+          </div>
+        )}
+        {counts.warnings > 0 && (
+          <div className="flex items-center text-yellow-500" title={`${counts.warnings} warnings`}>
+            <AlertTriangle size={16} />
+            <span className="text-xs ml-1">{counts.warnings}</span>
+          </div>
+        )}
+        {counts.infos > 0 && (
+          <div className="flex items-center text-blue-500" title={`${counts.infos} info messages`}>
+            <Info size={16} />
+            <span className="text-xs ml-1">{counts.infos}</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // Create a map to track parent-child relationships
   const pagesByParent: Record<string, PageNode[]> = {};
   const processedUrls = new Set<string>();
 
   // Process pages to build hierarchy safely
   pages.forEach(page => {
-    if (processedUrls.has(page.url)) return; // Skip if already processed
+    if (processedUrls.has(page.url)) return;
     processedUrls.add(page.url);
 
     const parent = page.parentUrl || 'root';
     if (!pagesByParent[parent]) {
       pagesByParent[parent] = [];
     }
-    // Avoid circular references
     if (page.parentUrl !== page.url) {
       pagesByParent[parent].push(page);
     }
   });
 
   const renderNode = (node: PageNode, processedNodes = new Set<string>()) => {
-    // Prevent infinite recursion
-    if (processedNodes.has(node.url)) {
-      return null;
-    }
+    if (processedNodes.has(node.url)) return null;
     processedNodes.add(node.url);
 
     const isExpanded = expandedNodes.has(node.url);
@@ -83,11 +140,12 @@ export default function SiteStructure({ structure, pages = [], onPageClick }: Si
             )}
           </div>
           <span 
-            className="text-blue-600 hover:underline cursor-pointer"
+            className="text-blue-600 hover:underline cursor-pointer flex-grow"
             onClick={() => onPageClick?.(node.url)}
           >
             {node.title || node.url}
           </span>
+          {renderAuditIcons(node.url)}
         </div>
         
         {isExpanded && (
