@@ -1,4 +1,3 @@
-// models/Project.ts
 import mongoose from 'mongoose';
 
 export interface IAuditResult {
@@ -6,8 +5,31 @@ export interface IAuditResult {
   severity: 'error' | 'warning' | 'info';
   message: string;
   details?: string;
-  location?: string;
+  url?: string;
   timestamp: Date;
+}
+
+export interface ISiteStructure {
+  totalPages: number;
+  maxDepth: number;
+  internalLinks: number;
+  externalLinks: number;
+}
+
+export interface IPageLink {
+  url: string;
+  text: string;
+  type: 'internal' | 'external';
+}
+
+export interface IPage {
+  url: string;
+  title: string;
+  links: IPageLink[];
+  level: number;
+  parentUrl?: string;
+  status?: number;
+  error?: string;
 }
 
 export interface IProject extends mongoose.Document {
@@ -18,6 +40,8 @@ export interface IProject extends mongoose.Document {
   createdAt: Date;
   lastAuditDate?: Date;
   auditResults?: IAuditResult[];
+  siteStructure?: ISiteStructure;
+  pages?: IPage[];
 }
 
 const ProjectSchema = new mongoose.Schema({
@@ -30,36 +54,18 @@ const ProjectSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Project name is required'],
     trim: true,
-    maxlength: [100, 'Project name cannot be longer than 100 characters'],
-    validate: {
-      validator: function(v: string) {
-        return /^[\x20-\x7E]+$/.test(v); // Only allow printable ASCII characters
-      },
-      message: 'Project name contains invalid characters'
-    }
+    maxlength: [100, 'Project name cannot be longer than 100 characters']
   },
   domain: {
     type: String,
     required: [true, 'Domain is required'],
     trim: true,
-    lowercase: true,
-    validate: {
-      validator: function(v: string) {
-        return /^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9](?:\.[a-zA-Z]{2,})+$/.test(v);
-      },
-      message: 'Please enter a valid domain name'
-    }
+    lowercase: true
   },
   description: {
     type: String,
     trim: true,
-    maxlength: [500, 'Description cannot be longer than 500 characters'],
-    validate: {
-      validator: function(v: string) {
-        return !v || /^[\x20-\x7E]+$/.test(v); // Only allow printable ASCII characters if value exists
-      },
-      message: 'Description contains invalid characters'
-    }
+    maxlength: [500, 'Description cannot be longer than 500 characters']
   },
   createdAt: {
     type: Date,
@@ -69,8 +75,7 @@ const ProjectSchema = new mongoose.Schema({
   auditResults: [{
     type: {
       type: String,
-      required: true,
-      enum: ['meta', 'performance', 'security', 'content']
+      required: true
     },
     severity: {
       type: String,
@@ -82,11 +87,33 @@ const ProjectSchema = new mongoose.Schema({
       required: true
     },
     details: String,
-    location: String,
+    url: String,
     timestamp: {
       type: Date,
       default: Date.now
     }
+  }],
+  siteStructure: {
+    totalPages: Number,
+    maxDepth: Number,
+    internalLinks: Number,
+    externalLinks: Number
+  },
+  pages: [{
+    url: String,
+    title: String,
+    links: [{
+      url: String,
+      text: String,
+      type: {
+        type: String,
+        enum: ['internal', 'external']
+      }
+    }],
+    level: Number,
+    parentUrl: String,
+    status: Number,
+    error: String
   }]
 });
 

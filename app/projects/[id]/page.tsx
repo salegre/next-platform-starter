@@ -1,10 +1,10 @@
-// app/projects/[id]/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { KeywordRankingForm } from '@/app/keyword-ranking-form';
 import { RankingsTable } from '@/components/rankings-table';
+import SiteStructure from '@/components/site-structure';
 import { IProject, IAuditResult } from 'models/Project';
 import { IRanking } from 'models/Ranking';
 
@@ -13,16 +13,22 @@ interface ProjectData {
   rankings: IRanking[];
 }
 
-export default function ProjectDetailPage({ 
-  params 
-}: { 
-  params: { id: string } 
-}) {
+
+
+export default function ProjectDetailPage({ params }: { params: { id: string } }) {
   const [data, setData] = useState<ProjectData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
   const [isAuditing, setIsAuditing] = useState(false);
+  const [isCrawling, setIsCrawling] = useState(false);
+  const [error, setError] = useState('');
   const router = useRouter();
+
+  const handlePageClick = (pageUrl: string) => {
+    // Single encode is sufficient
+    const encodedUrl = encodeURIComponent(pageUrl);
+    console.log('Navigating to:', encodedUrl);
+    router.push(`/projects/${params.id}/pages/${encodedUrl}`);
+  };
 
   const fetchProjectData = async () => {
     try {
@@ -49,13 +55,29 @@ export default function ProjectDetailPage({
       });
       
       if (!response.ok) throw new Error('Failed to perform audit');
-      
-      // Refresh project data to get new audit results
       await fetchProjectData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setIsAuditing(false);
+    }
+  };
+
+  const handleCrawl = async () => {
+    setIsCrawling(true);
+    try {
+      const response = await fetch(`/api/projects/${params.id}/structure`, {
+        method: 'POST'
+      });
+      if (!response.ok) throw new Error('Failed to analyze site structure');
+      const result = await response.json();
+      if (result.success) {
+        await fetchProjectData();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setIsCrawling(false);
     }
   };
 
@@ -76,15 +98,36 @@ export default function ProjectDetailPage({
               <p className="text-gray-500 mt-2">{project.description}</p>
             )}
           </div>
-          <button
-            onClick={handleAudit}
-            disabled={isAuditing}
-            className="btn btn-primary"
-          >
-            {isAuditing ? 'Running Audit...' : 'Run SEO Audit'}
-          </button>
+          <div className="flex gap-4">
+            <button
+              onClick={handleCrawl}
+              disabled={isCrawling}
+              className="btn btn-secondary"
+            >
+              {isCrawling ? 'Crawling Site...' : 'Crawl Site'}
+            </button>
+            <button
+              onClick={handleAudit}
+              disabled={isAuditing}
+              className="btn btn-primary"
+            >
+              {isAuditing ? 'Running Audit...' : 'Run SEO Audit'}
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Site Structure */}
+      {project.siteStructure && (
+        <div className="mb-8">
+            <SiteStructure 
+            structure={project.siteStructure}
+            pages={project.pages || []}
+            onPageClick={handlePageClick}
+            />
+        </div>
+        )}
+
 
       {/* SEO Audit Results */}
       {project.auditResults && project.auditResults.length > 0 && (
@@ -107,6 +150,12 @@ export default function ProjectDetailPage({
                   <div className="font-medium">{result.message}</div>
                   {result.details && (
                     <div className="text-sm mt-1">{result.details}</div>
+                  )}
+                  {result.url && (
+                    <div className="text-sm mt-1">
+                      URL: <a href={result.url} target="_blank" rel="noopener noreferrer" 
+                           className="underline">{result.url}</a>
+                    </div>
                   )}
                 </div>
               ))}
@@ -132,6 +181,7 @@ export default function ProjectDetailPage({
           projectId={params.id}
           domain={project.domain}
         />
-      </div></div>
+      </div>
+    </div>
   );
 }
