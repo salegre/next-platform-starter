@@ -6,14 +6,7 @@ export interface IAuditResult {
   message: string;
   details?: string;
   url?: string;
-  timestamp: Date;
-}
-
-export interface ISiteStructure {
-  totalPages: number;
-  maxDepth: number;
-  internalLinks: number;
-  externalLinks: number;
+  timestamp?: Date;
 }
 
 export interface IPageLink {
@@ -30,6 +23,14 @@ export interface IPage {
   parentUrl?: string;
   status?: number;
   error?: string;
+  auditResults?: IAuditResult[];
+}
+
+export interface ISiteStructure {
+  totalPages: number;
+  maxDepth: number;
+  internalLinks: number;
+  externalLinks: number;
 }
 
 export interface IProject extends mongoose.Document {
@@ -43,6 +44,122 @@ export interface IProject extends mongoose.Document {
   siteStructure?: ISiteStructure;
   pages?: IPage[];
 }
+
+const AuditResultSchema = new mongoose.Schema({
+  type: {
+    type: String,
+    required: true,
+    enum: ['meta', 'content', 'error']
+  },
+  severity: {
+    type: String,
+    required: true,
+    enum: ['error', 'warning', 'info']
+  },
+  message: {
+    type: String,
+    required: true
+  },
+  details: {
+    type: String,
+    required: false
+  },
+  url: {
+    type: String,
+    required: false
+  },
+  timestamp: {
+    type: Date,
+    default: Date.now,
+    required: false
+  }
+}, { 
+  _id: false,
+  strict: true 
+});
+
+const PageLinkSchema = new mongoose.Schema({
+  url: {
+    type: String,
+    required: true
+  },
+  text: {
+    type: String,
+    required: true
+  },
+  type: {
+    type: String,
+    required: true,
+    enum: ['internal', 'external']
+  }
+}, { 
+  _id: false,
+  strict: true 
+});
+
+const PageSchema = new mongoose.Schema({
+  url: {
+    type: String,
+    required: true
+  },
+  title: {
+    type: String,
+    required: false
+  },
+  links: {
+    type: [PageLinkSchema],
+    default: []
+  },
+  level: {
+    type: Number,
+    required: true
+  },
+  parentUrl: {
+    type: String,
+    required: false
+  },
+  status: {
+    type: Number,
+    required: false
+  },
+  error: {
+    type: String,
+    required: false
+  },
+  auditResults: {
+    type: [AuditResultSchema],
+    default: []
+  }
+}, { 
+  _id: false,
+  strict: true 
+});
+
+const SiteStructureSchema = new mongoose.Schema({
+  totalPages: {
+    type: Number,
+    required: true,
+    default: 0
+  },
+  maxDepth: {
+    type: Number,
+    required: true,
+    default: 0
+  },
+  internalLinks: {
+    type: Number,
+    required: true,
+    default: 0
+  },
+  externalLinks: {
+    type: Number,
+    required: true,
+    default: 0
+  }
+}, { 
+  _id: false,
+  strict: true 
+});
 
 const ProjectSchema = new mongoose.Schema({
   user: {
@@ -71,50 +188,24 @@ const ProjectSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
-  lastAuditDate: Date,
-  auditResults: [{
-    type: {
-      type: String,
-      required: true
-    },
-    severity: {
-      type: String,
-      required: true,
-      enum: ['error', 'warning', 'info']
-    },
-    message: {
-      type: String,
-      required: true
-    },
-    details: String,
-    url: String,
-    timestamp: {
-      type: Date,
-      default: Date.now
-    }
-  }],
-  siteStructure: {
-    totalPages: Number,
-    maxDepth: Number,
-    internalLinks: Number,
-    externalLinks: Number
+  lastAuditDate: {
+    type: Date,
+    required: false
   },
-  pages: [{
-    url: String,
-    title: String,
-    links: [{
-      url: String,
-      text: String,
-      type: {
-        type: String,
-        enum: ['internal', 'external']
-      }
-    }],
-    level: Number,
-    parentUrl: String,
-    status: Number,
-    error: String
-  }]
+  auditResults: {
+    type: [AuditResultSchema],
+    default: []
+  },
+  siteStructure: {
+    type: SiteStructureSchema,
+    required: false
+  },
+  pages: {
+    type: [PageSchema],
+    default: []
+  }
+}, {
+  strict: true
 });
 
 // Clean the data before saving

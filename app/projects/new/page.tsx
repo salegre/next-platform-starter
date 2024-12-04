@@ -1,4 +1,3 @@
-// app/projects/new/page.tsx
 'use client';
 
 import { useState } from 'react';
@@ -12,10 +11,51 @@ export default function NewProjectPage() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({
+    name: '',
+    domain: '',
+    description: ''
+  });
   const router = useRouter();
+
+  const validateForm = () => {
+    const errors = {
+      name: '',
+      domain: '',
+      description: ''
+    };
+    let isValid = true;
+
+    // Name validation
+    if (formData.name.length > 100) {
+      errors.name = 'Project name cannot exceed 100 characters';
+      isValid = false;
+    }
+
+    // Domain validation
+    const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9](?:\.[a-zA-Z]{2,})+$/;
+    if (!domainRegex.test(formData.domain)) {
+      errors.domain = 'Please enter a valid domain (e.g., example.com)';
+      isValid = false;
+    }
+
+    // Description validation
+    if (formData.description && formData.description.length > 500) {
+      errors.description = 'Description cannot exceed 500 characters';
+      isValid = false;
+    }
+
+    setFieldErrors(errors);
+    return isValid;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!validateForm()) {
+      return;
+    }
+
     setIsLoading(true);
     setError('');
 
@@ -25,7 +65,10 @@ export default function NewProjectPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          domain: formData.domain.toLowerCase()
+        }),
       });
 
       if (!response.ok) {
@@ -47,6 +90,11 @@ export default function NewProjectPage() {
     setFormData(prev => ({
       ...prev,
       [name]: value
+    }));
+    // Clear error when user starts typing
+    setFieldErrors(prev => ({
+      ...prev,
+      [name]: ''
     }));
   };
 
@@ -72,9 +120,17 @@ export default function NewProjectPage() {
             required
             value={formData.name}
             onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+              fieldErrors.name ? 'border-red-500' : 'border-gray-300'
+            }`}
             placeholder="My Website Project"
           />
+          {fieldErrors.name && (
+            <p className="mt-1 text-sm text-red-600">{fieldErrors.name}</p>
+          )}
+          <p className="mt-1 text-sm text-gray-500">
+            Maximum 100 characters
+          </p>
         </div>
 
         <div className="mb-4">
@@ -88,11 +144,16 @@ export default function NewProjectPage() {
             required
             value={formData.domain}
             onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+              fieldErrors.domain ? 'border-red-500' : 'border-gray-300'
+            }`}
             placeholder="example.com"
           />
+          {fieldErrors.domain && (
+            <p className="mt-1 text-sm text-red-600">{fieldErrors.domain}</p>
+          )}
           <p className="mt-1 text-sm text-gray-500">
-            Enter domain without http:// or https://
+            Enter domain without http:// or https:// (e.g., example.com)
           </p>
         </div>
 
@@ -105,10 +166,18 @@ export default function NewProjectPage() {
             name="description"
             value={formData.description}
             onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+              fieldErrors.description ? 'border-red-500' : 'border-gray-300'
+            }`}
             rows={4}
             placeholder="Project description (optional)"
           />
+          {fieldErrors.description && (
+            <p className="mt-1 text-sm text-red-600">{fieldErrors.description}</p>
+          )}
+          <p className="mt-1 text-sm text-gray-500">
+            Maximum 500 characters
+          </p>
         </div>
 
         <div className="flex justify-end gap-4">

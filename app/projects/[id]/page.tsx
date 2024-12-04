@@ -5,15 +5,30 @@ import { useRouter } from 'next/navigation';
 import { KeywordRankingForm } from '@/app/keyword-ranking-form';
 import { RankingsTable } from '@/components/rankings-table';
 import SiteStructure from '@/components/site-structure';
+import { AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react';
 import { IProject, IAuditResult } from 'models/Project';
 import { IRanking } from 'models/Ranking';
 
-interface ProjectData {
-  project: IProject;
-  rankings: IRanking[];
+interface AuditSummary {
+  total: number;
+  errors: number;
+  warnings: number;
+  info: number;
 }
 
+interface ProjectData {
+    project: IProject;
+    rankings: IRanking[];
+  }
 
+function getAuditSummary(auditResults: IAuditResult[]): AuditSummary {
+  return auditResults.reduce((summary, result) => ({
+    total: summary.total + 1,
+    errors: summary.errors + (result.severity === 'error' ? 1 : 0),
+    warnings: summary.warnings + (result.severity === 'warning' ? 1 : 0),
+    info: summary.info + (result.severity === 'info' ? 1 : 0)
+  }), { total: 0, errors: 0, warnings: 0, info: 0 });
+}
 
 export default function ProjectDetailPage({ params }: { params: { id: string } }) {
   const [data, setData] = useState<ProjectData | null>(null);
@@ -117,16 +132,68 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
         </div>
       </div>
 
+      {project.pages?.length > 0 && project.lastAuditDate && (
+        <div className="mb-8">
+          <h2 className="text-xl font-bold mb-4">Site Audit Overview</h2>
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="mb-4">
+              <p className="text-sm text-gray-500">
+                Last audit: {new Date(project.lastAuditDate).toLocaleString()}
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {project.pages.map((page, index) => {
+                const summary = getAuditSummary(page.auditResults || []);
+                return (
+                  <div key={index} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <h3 className="font-semibold text-sm text-gray-900 truncate mb-2" title={page.title || page.url}>
+                      {page.title || page.url}
+                    </h3>
+                    <div className="flex gap-4">
+                      {summary.errors > 0 && (
+                        <div className="flex items-center text-red-600">
+                          <AlertCircle size={16} className="mr-1" />
+                          {summary.errors}
+                        </div>
+                      )}
+                      {summary.warnings > 0 && (
+                        <div className="flex items-center text-yellow-600">
+                          <AlertTriangle size={16} className="mr-1" />
+                          {summary.warnings}
+                        </div>
+                      )}
+                      {summary.info > 0 && (
+                        <div className="flex items-center text-blue-600">
+                          <CheckCircle size={16} className="mr-1" />
+                          {summary.info}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => router.push(`/projects/${params.id}/pages/${encodeURIComponent(page.url)}`)}
+                      className="mt-2 text-sm text-blue-600 hover:underline"
+                    >
+                      View Details
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Site Structure */}
       {project.siteStructure && (
         <div className="mb-8">
-            <SiteStructure 
+          <SiteStructure 
             structure={project.siteStructure}
             pages={project.pages || []}
             onPageClick={handlePageClick}
-            />
+          />
         </div>
-        )}
+      )}
+
 
 
       {/* SEO Audit Results */}

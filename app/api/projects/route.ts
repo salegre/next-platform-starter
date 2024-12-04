@@ -35,14 +35,46 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Create project
-    const project = new Project({
+    // Create project with explicit schema structure
+    const projectData = {
       user: userData.id,
-      ...sanitizedData
-    });
+      ...sanitizedData,
+      createdAt: new Date(),
+      lastAuditDate: null,
+      auditResults: [], // MongoDB will handle the schema validation
+      siteStructure: {
+        totalPages: 0,
+        maxDepth: 0,
+        internalLinks: 0,
+        externalLinks: 0
+      },
+      pages: [] // MongoDB will handle the schema validation
+    };
 
-    await project.save();
-    return NextResponse.json(project, { status: 201 });
+    // Create and validate the project
+    const project = new Project(projectData);
+
+    // Explicitly validate before saving
+    const validationError = project.validateSync();
+    if (validationError) {
+      console.error('Validation error:', validationError);
+      return NextResponse.json({ 
+        error: 'Invalid project data',
+        details: validationError.message
+      }, { status: 400 });
+    }
+
+    // Save the project
+    const savedProject = await project.save();
+    
+    // Return only necessary fields
+    return NextResponse.json({
+      _id: savedProject._id,
+      name: savedProject.name,
+      domain: savedProject.domain,
+      description: savedProject.description,
+      createdAt: savedProject.createdAt
+    }, { status: 201 });
 
   } catch (error) {
     console.error('Project creation error:', error);
@@ -61,7 +93,7 @@ export async function GET(request: NextRequest) {
 
     const projects = await Project.find({ user: userData.id })
       .sort({ createdAt: -1 })
-      .select('name domain description createdAt lastAuditDate'); // Only select needed fields
+      .select('name domain description createdAt lastAuditDate');
 
     return NextResponse.json(projects.map(project => ({
       ...project.toObject(),
@@ -70,6 +102,7 @@ export async function GET(request: NextRequest) {
       description: project.description ? sanitizeString(project.description) : undefined
     })));
   } catch (error) {
+    console.error('Project fetch error:', error);
     return NextResponse.json({ error: 'Failed to fetch projects' }, { status: 500 });
   }
 }

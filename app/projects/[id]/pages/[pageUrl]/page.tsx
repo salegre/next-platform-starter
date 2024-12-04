@@ -30,34 +30,53 @@ export default function PageDetailsPage({
 }) {
   const [pageDetails, setPageDetails] = useState<PageDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAuditing, setIsAuditing] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
 
-  useEffect(() => {
-    const fetchPageDetails = async () => {
-      try {
-        setIsLoading(true);
-        // Use encodeURIComponent for the API fetch
-        const response = await fetch(`/api/projects/${params.id}/pages/${encodeURIComponent(params.pageUrl)}`);
-        
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to fetch page details');
-        }
-        
-        const data = await response.json();
-        console.log('Received page details:', data);
-        setPageDetails(data);
-      } catch (err) {
-        console.error('Error fetching page details:', err);
-        setError(err instanceof Error ? err.message : 'An error occurred');
-      } finally {
-        setIsLoading(false);
+  const fetchPageDetails = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch(`/api/projects/${params.id}/pages/${encodeURIComponent(params.pageUrl)}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch page details');
       }
-    };
-  
+      
+      const data = await response.json();
+      setPageDetails(data);
+    } catch (err) {
+      console.error('Error fetching page details:', err);
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAudit = async () => {
+    setIsAuditing(true);
+    try {
+      const response = await fetch(
+        `/api/projects/${params.id}/pages/${encodeURIComponent(params.pageUrl)}/audit`,
+        { method: 'POST' }
+      );
+      
+      if (!response.ok) {
+        throw new Error('Failed to audit page');
+      }
+
+      // Refresh page details to get new audit results
+      await fetchPageDetails();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setIsAuditing(false);
+    }
+  };
+
+  useEffect(() => {
     if (params.pageUrl) {
-      console.log('Fetching details for URL:', params.pageUrl);
       fetchPageDetails();
     }
   }, [params.id, params.pageUrl]);
@@ -70,7 +89,7 @@ export default function PageDetailsPage({
       </div>
     </div>
   );
-  
+
   if (error) return (
     <div className="container mx-auto p-6">
       <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
@@ -85,20 +104,34 @@ export default function PageDetailsPage({
       </div>
     </div>
   );
-  if (!pageDetails) return <div>No page details found</div>;
 
-  const internalLinks = pageDetails.links?.filter(link => link.type === 'internal') || [];
-  const externalLinks = pageDetails.links?.filter(link => link.type === 'external') || [];
+  if (!pageDetails) return <div>No page details found</div>;
 
   return (
     <div className="container mx-auto p-6">
-      <button
-        onClick={() => router.back()}
-        className="flex items-center gap-2 mb-6 text-blue-500 hover:text-blue-600"
-      >
-        <ArrowLeft size={20} />
-        Back to Project
-      </button>
+      <div className="flex justify-between items-center mb-6">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-2 text-blue-500 hover:text-blue-600"
+        >
+          <ArrowLeft size={20} />
+          Back to Project
+        </button>
+        <button
+          onClick={handleAudit}
+          disabled={isAuditing}
+          className="btn btn-primary"
+        >
+          {isAuditing ? (
+            <>
+              <Loader className="w-4 h-4 animate-spin mr-2" />
+              Auditing...
+            </>
+          ) : (
+            'Audit Page'
+          )}
+        </button>
+      </div>
 
       <h1 className="text-2xl font-bold mb-6">{pageDetails.title || pageDetails.url}</h1>
 
@@ -130,43 +163,37 @@ export default function PageDetailsPage({
         </div>
 
         {/* Links */}
-        {(internalLinks.length > 0 || externalLinks.length > 0) && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">Links</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {internalLinks.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-medium mb-3">Internal Links</h3>
-                  <ul className="space-y-2">
-                    {internalLinks.map((link, index) => (
-                      <li key={index}>
-                        <a href={link.url} target="_blank" rel="noopener noreferrer"
-                           className="text-blue-500 hover:underline">
-                          {link.text || link.url}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {externalLinks.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-medium mb-3">External Links</h3>
-                  <ul className="space-y-2">
-                    {externalLinks.map((link, index) => (
-                      <li key={index}>
-                        <a href={link.url} target="_blank" rel="noopener noreferrer"
-                           className="text-blue-500 hover:underline">
-                          {link.text || link.url}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold mb-4">Links</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h3 className="text-lg font-medium mb-3">Internal Links</h3>
+              <ul className="space-y-2">
+                {pageDetails.links.filter(link => link.type === 'internal').map((link, index) => (
+                  <li key={index}>
+                    <a href={link.url} target="_blank" rel="noopener noreferrer"
+                       className="text-blue-500 hover:underline">
+                      {link.text || link.url}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h3 className="text-lg font-medium mb-3">External Links</h3>
+              <ul className="space-y-2">
+                {pageDetails.links.filter(link => link.type === 'external').map((link, index) => (
+                  <li key={index}>
+                    <a href={link.url} target="_blank" rel="noopener noreferrer"
+                       className="text-blue-500 hover:underline">
+                      {link.text || link.url}
+                    </a>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Audit Results */}
         {pageDetails.auditResults && pageDetails.auditResults.length > 0 && (
