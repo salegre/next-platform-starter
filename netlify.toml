@@ -1,3 +1,6 @@
 [build]
   publish = ".next"
   command = "npm run build"
+
+  [functions]
+    external_node_modules = ["jsdom"]

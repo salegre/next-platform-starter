@@ -67,7 +67,7 @@ async function fetchWithRetry(url: string, maxRetries = 3, delay = 1000) {
     throw new Error(`Failed after ${maxRetries} retries`);
   }
   
-  export async function analyzeSiteStructure(domain: string, maxPages = 20, maxDepth = 3): Promise<SiteStructure> {
+  export async function analyzeSiteStructure(domain: string, maxPages = 50, maxDepth = 3): Promise<SiteStructure> {
     const baseUrl = domain.startsWith('http') ? domain : `https://${domain}`;
     const visitedUrls = new Set<string>();
     const structure: SiteStructure = {

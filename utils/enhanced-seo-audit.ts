@@ -27,9 +27,9 @@ interface SitewideAuditResult {
 const CONFIG = {
   TIMEOUT: 15000,
   MAX_RETRIES: 3,
-  RETRY_DELAY: 1000,
+  RETRY_DELAY: 500,
   BATCH_SIZE: 3,
-  BATCH_DELAY: 2000
+  BATCH_DELAY: 1000
 };
 
 // Helper function to handle retries
