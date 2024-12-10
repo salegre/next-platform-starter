@@ -1,10 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Project } from 'models/Project';
+import { Project, IAuditResult, ISiteStructure } from 'models/Project';
 import connectMongoDB from 'utils/mongodb-connection';
 import { getTokenData } from 'utils/auth';
 import { performSitewideAudit } from 'utils/enhanced-seo-audit';
 
 const AUDIT_TIMEOUT = 25000; // 25 seconds max for entire operation
+
+interface SitewideAuditResult {
+  siteStructure: ISiteStructure;
+  pageAudits: {
+    [url: string]: IAuditResult[];
+  };
+  globalIssues: IAuditResult[];
+}
+
+interface EssentialResults {
+  globalIssues: IAuditResult[];
+  pageAudits: {
+    [url: string]: IAuditResult[];
+  };
+}
 
 export async function POST(
   request: NextRequest,
@@ -32,39 +47,42 @@ export async function POST(
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
-    // Perform the audit with abort signal
+    // Perform the audit with abort signal and proper typing
     const auditResults = await Promise.race([
       performSitewideAudit(project.domain),
-      new Promise((_, reject) => {
+      new Promise<never>((_, reject) => {
         controller.signal.addEventListener('abort', () => {
           reject(new Error('Audit timeout exceeded'));
         });
       })
-    ]);
+    ]) as SitewideAuditResult;
 
-    // Store only essential audit data
-    const essentialResults = {
-      globalIssues: auditResults.globalIssues.filter(issue => 
-        issue.severity === 'error' || 
-        (issue.severity === 'warning' && issue.type === 'structure')
-      ),
+    // Store only essential audit data with proper typing
+    const essentialResults: EssentialResults = {
+      globalIssues: Array.isArray(auditResults.globalIssues) ? 
+        auditResults.globalIssues.filter(issue => 
+          issue.severity === 'error' || 
+          (issue.severity === 'warning' && issue.type === 'structure')
+        ) : [],
       pageAudits: Object.fromEntries(
-        Object.entries(auditResults.pageAudits)
+        Object.entries(auditResults.pageAudits || {})
           .map(([url, results]) => [
             url,
-            results.filter(result => 
+            Array.isArray(results) ? results.filter(result => 
               result.severity === 'error' || 
               (result.severity === 'warning' && result.type === 'meta')
-            )
+            ) : []
           ])
           .filter(([_, results]) => results.length > 0)
       )
     };
 
-    // Update project with minimal audit data
-    project.lastAuditDate = new Date();
-    project.auditResults = [
-      ...essentialResults.globalIssues,
+    // Create properly typed audit entries
+    const auditEntries: IAuditResult[] = [
+      ...essentialResults.globalIssues.map(issue => ({
+        ...issue,
+        timestamp: new Date()
+      })),
       ...Object.entries(essentialResults.pageAudits).flatMap(([url, results]) => 
         results.map(result => ({
           ...result,
@@ -73,9 +91,18 @@ export async function POST(
         }))
       )
     ];
+
+    // Update project with properly typed data
+    project.lastAuditDate = new Date();
+    project.auditResults = auditEntries;
     
     if (auditResults.siteStructure) {
-      project.siteStructure = auditResults.siteStructure;
+      project.siteStructure = {
+        totalPages: auditResults.siteStructure.totalPages,
+        maxDepth: auditResults.siteStructure.maxDepth,
+        internalLinks: auditResults.siteStructure.internalLinks,
+        externalLinks: auditResults.siteStructure.externalLinks
+      };
     }
     
     await project.save();
@@ -94,7 +121,8 @@ export async function POST(
     console.error('Audit error:', error);
     
     // Handle timeout specifically
-    if (error.name === 'AbortError' || error.message === 'Audit timeout exceeded') {
+    if (error instanceof Error && 
+        (error.name === 'AbortError' || error.message === 'Audit timeout exceeded')) {
       return NextResponse.json({ 
         error: 'Audit timeout - try auditing fewer pages',
         details: 'The audit took too long to complete. Consider reducing the number of pages or depth of crawl.'
