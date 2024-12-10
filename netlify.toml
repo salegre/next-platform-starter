@@ -13,11 +13,11 @@ package = "@netlify/plugin-nextjs"
 [functions."*"]
   included_files = ["utils/**"]
   memory = 1024
-  timeout = 30
+  timeout = 300
 
 # Specific configuration for the audit function
 [functions."/api/projects/*/audit"]
-  timeout = 3000
+  timeout = 300
   memory = 2048
   included_files = ["utils/**"]
 
