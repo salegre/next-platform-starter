@@ -6,10 +6,35 @@
   external_node_modules = ["jsdom"]
   node_bundler = "esbuild"
   
+[[plugins]]
+package = "@netlify/plugin-nextjs"
+
+# Increase function timeout and memory
 [functions."*"]
   included_files = ["utils/**"]
   memory = 1024
   timeout = 30
 
-[[plugins]]
-package = "@netlify/plugin-nextjs"
+# Specific configuration for the audit function
+[functions."/api/projects/*/audit"]
+  timeout = 3000
+  memory = 2048
+  included_files = ["utils/**"]
+
+# Add build settings to optimize for production
+[build.environment]
+  NODE_ENV = "production"
+  NEXT_TELEMETRY_DISABLED = "1"
+
+# Add processing settings
+[build.processing]
+  skip_processing = false
+
+# Add headers for better caching and security
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

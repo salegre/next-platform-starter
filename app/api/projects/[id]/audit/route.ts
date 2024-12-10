@@ -4,7 +4,7 @@ import connectMongoDB from 'utils/mongodb-connection';
 import { getTokenData } from 'utils/auth';
 import { performSitewideAudit } from 'utils/enhanced-seo-audit';
 
-const AUDIT_TIMEOUT = 25000; // 25 seconds max for entire operation
+const AUDIT_TIMEOUT = 250000; // 25 seconds max for entire operation
 
 interface SitewideAuditResult {
   siteStructure: ISiteStructure;
