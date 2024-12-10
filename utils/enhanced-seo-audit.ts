@@ -23,16 +23,15 @@ interface SitewideAuditResult {
   globalIssues: AuditResult[];
 }
 
-// Configurable constants
+// Optimized constants for serverless environment
 const CONFIG = {
-  TIMEOUT: 15000,
-  MAX_RETRIES: 3,
-  RETRY_DELAY: 500,
-  BATCH_SIZE: 3,
-  BATCH_DELAY: 1000
+  TIMEOUT: 8000,        // Reduced from 15000
+  MAX_RETRIES: 2,       // Reduced from 3
+  RETRY_DELAY: 300,     // Reduced from 500
+  BATCH_SIZE: 2,        // Reduced from 3
+  BATCH_DELAY: 500      // Reduced from 1000
 };
 
-// Helper function to handle retries
 async function fetchWithRetry(url: string, retries = CONFIG.MAX_RETRIES): Promise<any> {
   try {
     return await axios.get(url, {
@@ -42,7 +41,7 @@ async function fetchWithRetry(url: string, retries = CONFIG.MAX_RETRIES): Promis
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5'
       },
-      maxRedirects: 5
+      maxRedirects: 3
     });
   } catch (error) {
     if (retries > 0) {
@@ -53,17 +52,18 @@ async function fetchWithRetry(url: string, retries = CONFIG.MAX_RETRIES): Promis
   }
 }
 
-// Function to audit a single page
 async function auditPage(page: { url: string }): Promise<AuditResult[]> {
   const pageResults: AuditResult[] = [];
+  let dom: JSDOM | null = null;
   
   try {
     console.log(`Auditing page: ${page.url}`);
     const response = await fetchWithRetry(page.url);
     
-    const dom = new JSDOM(response.data, {
+    dom = new JSDOM(response.data, {
       url: page.url,
       runScripts: 'outside-only',
+      pretendToBeVisual: false,
       resources: 'usable'
     });
 
@@ -131,9 +131,6 @@ async function auditPage(page: { url: string }): Promise<AuditResult[]> {
       });
     }
 
-    // Clean up DOM to prevent memory leaks
-    dom.window.close();
-
     return pageResults;
   } catch (error) {
     console.error(`Error auditing ${page.url}:`, error);
@@ -144,6 +141,11 @@ async function auditPage(page: { url: string }): Promise<AuditResult[]> {
       details: error.message,
       url: page.url
     }];
+  } finally {
+    // Clean up DOM to prevent memory leaks
+    if (dom) {
+      dom.window.close();
+    }
   }
 }
 
@@ -151,17 +153,18 @@ export async function performSitewideAudit(domain: string): Promise<SitewideAudi
   console.log('Starting sitewide audit for:', domain);
   
   try {
-    const siteStructure = await analyzeSiteStructure(domain);
+    // Get site structure with reduced limits
+    const siteStructure = await analyzeSiteStructure(domain, 20, 2);
     const pageAudits: { [url: string]: AuditResult[] } = {};
     const globalIssues: AuditResult[] = [];
 
     // Check global site structure
-    if (siteStructure.maxDepth > 4) {
+    if (siteStructure.maxDepth > 3) {
       globalIssues.push({
         type: 'structure',
         severity: 'warning',
         message: 'Site structure too deep',
-        details: `Maximum depth of ${siteStructure.maxDepth} levels found. Recommended: 4 or fewer levels.`
+        details: `Maximum depth of ${siteStructure.maxDepth} levels found. Recommended: 3 or fewer levels.`
       });
     }
 
@@ -174,7 +177,7 @@ export async function performSitewideAudit(domain: string): Promise<SitewideAudi
       });
     }
 
-    // Process pages in batches to prevent overwhelming the server
+    // Process pages in smaller batches with shorter delays
     for (let i = 0; i < siteStructure.pages.length; i += CONFIG.BATCH_SIZE) {
       const batch = siteStructure.pages.slice(i, i + CONFIG.BATCH_SIZE);
       console.log(`Processing batch ${i / CONFIG.BATCH_SIZE + 1}/${Math.ceil(siteStructure.pages.length / CONFIG.BATCH_SIZE)}`);

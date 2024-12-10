@@ -2,5 +2,14 @@
   publish = ".next"
   command = "npm run build"
 
-  [functions]
-    external_node_modules = ["jsdom"]
+[functions]
+  external_node_modules = ["jsdom"]
+  node_bundler = "esbuild"
+  
+[functions."*"]
+  included_files = ["utils/**"]
+  memory = 1024
+  timeout = 30
+
+[[plugins]]
+package = "@netlify/plugin-nextjs"

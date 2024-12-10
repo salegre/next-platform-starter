@@ -33,7 +33,6 @@ interface SiteStructure {
 function normalizeUrl(url: string, base: string): string {
   try {
     const absoluteUrl = new URL(url, base).toString();
-    // Remove hash and trailing slash
     return absoluteUrl.split('#')[0].replace(/\/$/, '');
   } catch (e) {
     console.warn('Invalid URL:', url);
@@ -41,13 +40,12 @@ function normalizeUrl(url: string, base: string): string {
   }
 }
 
-// Update the fetchWithRetry function
-async function fetchWithRetry(url: string, maxRetries = 3, delay = 1000) {
+async function fetchWithRetry(url: string, maxRetries = 2, delay = 500) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const response = await axios.get(url, {
-          timeout: 15000,
-          maxRedirects: 5,
+          timeout: 8000, // Reduced timeout for serverless
+          maxRedirects: 3,
           headers: {
             'User-Agent': 'Mozilla/5.0 (compatible; SiteAnalyzerBot/1.0)',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -65,9 +63,9 @@ async function fetchWithRetry(url: string, maxRetries = 3, delay = 1000) {
       }
     }
     throw new Error(`Failed after ${maxRetries} retries`);
-  }
+}
   
-  export async function analyzeSiteStructure(domain: string, maxPages = 50, maxDepth = 3): Promise<SiteStructure> {
+export async function analyzeSiteStructure(domain: string, maxPages = 20, maxDepth = 2): Promise<SiteStructure> {
     const baseUrl = domain.startsWith('http') ? domain : `https://${domain}`;
     const visitedUrls = new Set<string>();
     const structure: SiteStructure = {
@@ -101,17 +99,17 @@ async function fetchWithRetry(url: string, maxRetries = 3, delay = 1000) {
         const dom = new JSDOM(response.data, {
           url,
           contentType: 'text/html; charset=utf-8',
+          pretendToBeVisual: false,
+          runScripts: 'outside-only'
         });
   
         const document = dom.window.document;
         visitedUrls.add(url);
   
-        // Extract links
         const links: PageLink[] = [];
-        const anchorTags = document.querySelectorAll('a[href]');
         const processedUrls = new Set<string>();
   
-        anchorTags.forEach(anchor => {
+        document.querySelectorAll('a[href]').forEach(anchor => {
           try {
             const href = anchor.getAttribute('href');
             if (!href) return;
@@ -149,7 +147,6 @@ async function fetchWithRetry(url: string, maxRetries = 3, delay = 1000) {
           }
         });
   
-        // Save page data
         structure.pages.push({
           url: mongoSafeUrl(url),
           title: mongoSafeString(document.title),
@@ -161,11 +158,14 @@ async function fetchWithRetry(url: string, maxRetries = 3, delay = 1000) {
   
         structure.maxDepth = Math.max(structure.maxDepth, depth);
         structure.totalPages = visitedUrls.size;
+
+        // Clean up DOM to prevent memory leaks
+        dom.window.close();
   
         if (queue.length > 0) {
           const next = queue.shift();
           if (next) {
-            await delay(1000);
+            await delay(500); // Reduced delay for serverless
             await crawlPage(next.url, next.depth, next.parentUrl);
           }
         }
@@ -194,15 +194,15 @@ async function fetchWithRetry(url: string, maxRetries = 3, delay = 1000) {
     while (queue.length > 0 && visitedUrls.size < maxPages) {
       const next = queue.shift();
       if (next) {
-        await delay(1000);
+        await delay(500); // Reduced delay for serverless
         await crawlPage(next.url, next.depth, next.parentUrl);
       }
     }
   
     return structure;
-  }
+}
   
-  function shouldCrawlUrl(url: string): boolean {
+function shouldCrawlUrl(url: string): boolean {
     const ignoreExtensions = [
       '.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.ico',
       '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
@@ -221,4 +221,4 @@ async function fetchWithRetry(url: string, maxRetries = 3, delay = 1000) {
     } catch (e) {
       return false;
     }
-  }
+}
