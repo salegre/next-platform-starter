@@ -23,13 +23,15 @@ interface SitewideAuditResult {
   globalIssues: AuditResult[];
 }
 
-// Optimized constants for serverless environment
+// Serverless-optimized configuration
 const CONFIG = {
-  TIMEOUT: 8000,        // Reduced from 15000
-  MAX_RETRIES: 2,       // Reduced from 3
-  RETRY_DELAY: 300,     // Reduced from 500
-  BATCH_SIZE: 2,        // Reduced from 3
-  BATCH_DELAY: 500      // Reduced from 1000
+  TIMEOUT: 5000,         // Reduced timeout
+  MAX_RETRIES: 1,        // Minimal retries
+  RETRY_DELAY: 200,      // Shorter delay
+  BATCH_SIZE: 1,         // Process one at a time
+  BATCH_DELAY: 200,      // Minimal delay between batches
+  MAX_PAGES: 5,          // Limit pages for initial audit
+  MAX_DEPTH: 1           // Limit crawl depth
 };
 
 async function fetchWithRetry(url: string, retries = CONFIG.MAX_RETRIES): Promise<any> {
@@ -41,7 +43,7 @@ async function fetchWithRetry(url: string, retries = CONFIG.MAX_RETRIES): Promis
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5'
       },
-      maxRedirects: 3
+      maxRedirects: 2
     });
   } catch (error) {
     if (retries > 0) {
@@ -69,7 +71,7 @@ async function auditPage(page: { url: string }): Promise<AuditResult[]> {
 
     const document = dom.window.document;
 
-    // Title checks
+    // Essential checks only
     const title = document.querySelector('title')?.textContent;
     if (!title) {
       pageResults.push({
@@ -78,17 +80,8 @@ async function auditPage(page: { url: string }): Promise<AuditResult[]> {
         message: 'Missing title tag',
         url: page.url
       });
-    } else if (title.length < 10 || title.length > 60) {
-      pageResults.push({
-        type: 'meta',
-        severity: 'warning',
-        message: 'Non-optimal title length',
-        details: `Length: ${title.length} chars. Recommended: 10-60 chars.`,
-        url: page.url
-      });
     }
 
-    // Meta description
     const metaDescription = document.querySelector('meta[name="description"]')?.getAttribute('content');
     if (!metaDescription) {
       pageResults.push({
@@ -99,34 +92,12 @@ async function auditPage(page: { url: string }): Promise<AuditResult[]> {
       });
     }
 
-    // Heading structure
     const h1Tags = document.querySelectorAll('h1');
     if (h1Tags.length === 0) {
       pageResults.push({
         type: 'content',
         severity: 'error',
         message: 'Missing H1 tag',
-        url: page.url
-      });
-    } else if (h1Tags.length > 1) {
-      pageResults.push({
-        type: 'content',
-        severity: 'warning',
-        message: 'Multiple H1 tags',
-        details: `Found ${h1Tags.length} H1 tags`,
-        url: page.url
-      });
-    }
-
-    // Image optimization
-    const images = document.querySelectorAll('img');
-    const imagesWithoutAlt = Array.from(images).filter(img => !img.hasAttribute('alt'));
-    if (imagesWithoutAlt.length > 0) {
-      pageResults.push({
-        type: 'content',
-        severity: 'warning',
-        message: 'Images missing alt text',
-        details: `${imagesWithoutAlt.length} images found without alt attributes`,
         url: page.url
       });
     }
@@ -142,7 +113,6 @@ async function auditPage(page: { url: string }): Promise<AuditResult[]> {
       url: page.url
     }];
   } finally {
-    // Clean up DOM to prevent memory leaks
     if (dom) {
       dom.window.close();
     }
@@ -150,21 +120,21 @@ async function auditPage(page: { url: string }): Promise<AuditResult[]> {
 }
 
 export async function performSitewideAudit(domain: string): Promise<SitewideAuditResult> {
-  console.log('Starting sitewide audit for:', domain);
+  console.log('Starting optimized sitewide audit for:', domain);
   
   try {
-    // Get site structure with reduced limits
-    const siteStructure = await analyzeSiteStructure(domain, 20, 2);
+    // Get minimal site structure
+    const siteStructure = await analyzeSiteStructure(domain, CONFIG.MAX_PAGES, CONFIG.MAX_DEPTH);
     const pageAudits: { [url: string]: AuditResult[] } = {};
     const globalIssues: AuditResult[] = [];
 
-    // Check global site structure
-    if (siteStructure.maxDepth > 3) {
+    // Basic structure checks
+    if (siteStructure.maxDepth > 2) {
       globalIssues.push({
         type: 'structure',
         severity: 'warning',
         message: 'Site structure too deep',
-        details: `Maximum depth of ${siteStructure.maxDepth} levels found. Recommended: 3 or fewer levels.`
+        details: `Maximum depth of ${siteStructure.maxDepth} levels found. Recommended: 2 or fewer levels.`
       });
     }
 
@@ -175,24 +145,26 @@ export async function performSitewideAudit(domain: string): Promise<SitewideAudi
         message: 'No pages accessible',
         details: 'The crawler was unable to access any pages. Check site availability and robots.txt settings.'
       });
+      
+      return {
+        siteStructure: {
+          totalPages: 0,
+          maxDepth: 0,
+          internalLinks: 0,
+          externalLinks: 0
+        },
+        pageAudits: {},
+        globalIssues
+      };
     }
 
-    // Process pages in smaller batches with shorter delays
-    for (let i = 0; i < siteStructure.pages.length; i += CONFIG.BATCH_SIZE) {
-      const batch = siteStructure.pages.slice(i, i + CONFIG.BATCH_SIZE);
-      console.log(`Processing batch ${i / CONFIG.BATCH_SIZE + 1}/${Math.ceil(siteStructure.pages.length / CONFIG.BATCH_SIZE)}`);
+    // Process pages sequentially
+    for (const page of siteStructure.pages) {
+      const results = await auditPage(page);
+      pageAudits[page.url] = results;
       
-      const batchResults = await Promise.all(
-        batch.map(page => auditPage(page))
-      );
-
-      // Store results for this batch
-      batch.forEach((page, index) => {
-        pageAudits[page.url] = batchResults[index];
-      });
-
-      // Add delay between batches unless it's the last batch
-      if (i + CONFIG.BATCH_SIZE < siteStructure.pages.length) {
+      // Small delay between pages
+      if (siteStructure.pages.indexOf(page) < siteStructure.pages.length - 1) {
         await new Promise(resolve => setTimeout(resolve, CONFIG.BATCH_DELAY));
       }
     }

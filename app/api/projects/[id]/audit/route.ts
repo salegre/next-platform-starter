@@ -4,12 +4,17 @@ import connectMongoDB from 'utils/mongodb-connection';
 import { getTokenData } from 'utils/auth';
 import { performSitewideAudit } from 'utils/enhanced-seo-audit';
 
+const AUDIT_TIMEOUT = 25000; // 25 seconds max for entire operation
+
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), AUDIT_TIMEOUT);
+
   try {
-    console.log('Starting sitewide SEO audit for project:', params.id);
+    console.log('Starting optimized sitewide SEO audit for project:', params.id);
     
     await connectMongoDB();
     const userData = await getTokenData(request);
@@ -27,13 +32,40 @@ export async function POST(
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
-    const auditResults = await performSitewideAudit(project.domain);
+    // Perform the audit with abort signal
+    const auditResults = await Promise.race([
+      performSitewideAudit(project.domain),
+      new Promise((_, reject) => {
+        controller.signal.addEventListener('abort', () => {
+          reject(new Error('Audit timeout exceeded'));
+        });
+      })
+    ]);
 
-    // Update project with audit results
+    // Store only essential audit data
+    const essentialResults = {
+      globalIssues: auditResults.globalIssues.filter(issue => 
+        issue.severity === 'error' || 
+        (issue.severity === 'warning' && issue.type === 'structure')
+      ),
+      pageAudits: Object.fromEntries(
+        Object.entries(auditResults.pageAudits)
+          .map(([url, results]) => [
+            url,
+            results.filter(result => 
+              result.severity === 'error' || 
+              (result.severity === 'warning' && result.type === 'meta')
+            )
+          ])
+          .filter(([_, results]) => results.length > 0)
+      )
+    };
+
+    // Update project with minimal audit data
     project.lastAuditDate = new Date();
     project.auditResults = [
-      ...auditResults.globalIssues,
-      ...Object.entries(auditResults.pageAudits).flatMap(([url, results]) => 
+      ...essentialResults.globalIssues,
+      ...Object.entries(essentialResults.pageAudits).flatMap(([url, results]) => 
         results.map(result => ({
           ...result,
           url,
@@ -41,17 +73,34 @@ export async function POST(
         }))
       )
     ];
-    project.siteStructure = auditResults.siteStructure;
+    
+    if (auditResults.siteStructure) {
+      project.siteStructure = auditResults.siteStructure;
+    }
     
     await project.save();
 
+    clearTimeout(timeoutId);
+    
     return NextResponse.json({ 
       success: true,
-      ...auditResults
+      results: essentialResults,
+      siteStructure: auditResults.siteStructure
     });
 
   } catch (error) {
+    clearTimeout(timeoutId);
+    
     console.error('Audit error:', error);
+    
+    // Handle timeout specifically
+    if (error.name === 'AbortError' || error.message === 'Audit timeout exceeded') {
+      return NextResponse.json({ 
+        error: 'Audit timeout - try auditing fewer pages',
+        details: 'The audit took too long to complete. Consider reducing the number of pages or depth of crawl.'
+      }, { status: 504 });
+    }
+    
     return NextResponse.json({ 
       error: 'Failed to perform audit',
       details: error instanceof Error ? error.message : 'Unknown error'
