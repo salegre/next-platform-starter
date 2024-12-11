@@ -57,33 +57,10 @@ export async function POST(
       })
     ]) as SitewideAuditResult;
 
-    // Store only essential audit data with proper typing
-    const essentialResults: EssentialResults = {
-      globalIssues: Array.isArray(auditResults.globalIssues) ? 
-        auditResults.globalIssues.filter(issue => 
-          issue.severity === 'error' || 
-          (issue.severity === 'warning' && issue.type === 'structure')
-        ) : [],
-      pageAudits: Object.fromEntries(
-        Object.entries(auditResults.pageAudits || {})
-          .map(([url, results]) => [
-            url,
-            Array.isArray(results) ? results.filter(result => 
-              result.severity === 'error' || 
-              (result.severity === 'warning' && result.type === 'meta')
-            ) : []
-          ])
-          .filter(([_, results]) => results.length > 0)
-      )
-    };
-
-    // Create properly typed audit entries
-    const auditEntries: IAuditResult[] = [
-      ...essentialResults.globalIssues.map(issue => ({
-        ...issue,
-        timestamp: new Date()
-      })),
-      ...Object.entries(essentialResults.pageAudits).flatMap(([url, results]) => 
+    project.lastAuditDate = new Date();
+    project.auditResults = [
+      ...auditResults.globalIssues,
+      ...Object.entries(auditResults.pageAudits).flatMap(([url, results]) => 
         results.map(result => ({
           ...result,
           url,
@@ -91,19 +68,6 @@ export async function POST(
         }))
       )
     ];
-
-    // Update project with properly typed data
-    project.lastAuditDate = new Date();
-    project.auditResults = auditEntries;
-    
-    if (auditResults.siteStructure) {
-      project.siteStructure = {
-        totalPages: auditResults.siteStructure.totalPages,
-        maxDepth: auditResults.siteStructure.maxDepth,
-        internalLinks: auditResults.siteStructure.internalLinks,
-        externalLinks: auditResults.siteStructure.externalLinks
-      };
-    }
     
     await project.save();
 
@@ -111,7 +75,7 @@ export async function POST(
     
     return NextResponse.json({ 
       success: true,
-      results: essentialResults,
+      results: auditResults,
       siteStructure: auditResults.siteStructure
     });
 
